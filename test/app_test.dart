@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:taxi_auto/app/app.dart';
+import 'support/test_app.dart';
 
 void main() {
   testWidgets('the initial companion screen starts without layout errors', (
@@ -13,10 +12,11 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(const ProviderScope(child: TaxiAutoApp()));
+      await tester.pumpWidget(testApp());
       await tester.pumpAndSettle();
 
       expect(find.text('Thanh Taxi Xanh'), findsOneWidget);
+      expect(find.text('Quản lý sự kiện'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
   });

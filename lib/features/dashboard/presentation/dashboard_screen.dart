@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../calendar/presentation/calendar_providers.dart';
+import '../../calendar/presentation/upcoming_events_card.dart';
 import '../../payment/presentation/payment_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -50,6 +51,8 @@ class DashboardScreen extends ConsumerWidget {
                 );
               },
             ),
+            const SizedBox(height: 24),
+            const UpcomingEventsCard(),
             const SizedBox(height: 24),
             FilledButton.icon(
               style: FilledButton.styleFrom(minimumSize: const Size(64, 64)),

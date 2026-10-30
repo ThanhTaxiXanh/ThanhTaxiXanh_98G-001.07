@@ -44,6 +44,13 @@ class VietQrCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x166e82a5),
+                  blurRadius: 20,
+                  offset: Offset(0, 6),
+                ),
+              ],
             ),
             child: Column(
               children: [
@@ -55,9 +62,19 @@ class VietQrCard extends StatelessWidget {
                   Text(
                     payment.accountHolder,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
                   ),
-                const Divider(height: 32),
+                const SizedBox(height: 16),
+                const SizedBox(
+                  height: 2,
+                  width: double.infinity,
+                  child: CustomPaint(painter: _DashedDivider()),
+                ),
+                const SizedBox(height: 16),
                 AspectRatio(
                   aspectRatio: 1,
                   child: PrettyQrView.data(
@@ -96,25 +113,60 @@ class VietQrCard extends StatelessWidget {
           if (amount.isNotEmpty || payment.note.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 16),
-              child: Column(
-                children: [
-                  if (amount.isNotEmpty)
-                    Text(
-                      '$amount VND',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: Column(
+                  children: [
+                    if (amount.isNotEmpty)
+                      Text(
+                        '$amount VND',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  if (payment.note.isNotEmpty)
-                    Text(payment.note, textAlign: TextAlign.center),
-                ],
+                    if (payment.note.isNotEmpty)
+                      Text(
+                        payment.note,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Color(0xff707076),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
         ],
       ),
     );
   }
+}
+
+class _DashedDivider extends CustomPainter {
+  const _DashedDivider();
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xffcbd0d8)
+      ..strokeWidth = 1.5;
+    for (var x = 0.0; x < size.width; x += 12) {
+      canvas.drawLine(
+        Offset(x, size.height / 2),
+        Offset((x + 7).clamp(0, size.width), size.height / 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedDivider oldDelegate) => false;
 }
 
 /// Capture a painted RepaintBoundary around the card, replacing canvas.toDataURL.

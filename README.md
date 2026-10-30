@@ -5,9 +5,15 @@ VietQR generator ported from the two source files supplied by the owner. Android
 application ID and namespace: `vn.thanhtaxixanh.car98g00107`.
 
 The phone dashboard shows today's Gregorian/lunar date and Can Chi year in UTC+7.
-The payment form generates an account-transfer QR and supports gallery images for
-bank and center logos. Account information is currently session-only. Map, event
-CRUD, persisted settings, media and Android Auto projection remain unimplemented.
+The dashboard also shows today's events and upcoming events over the next 30 days,
+with an entry to create, edit and delete events. Events can use Gregorian or
+Vietnamese lunar dates, including annual recurrence.
+
+The payment screen selects saved recipients and asks only for amount and note in
+daily use. Recipients, default selection, default note and optional footer/center
+logos are stored in the app's SQLite database. A searchable bank picker replaces
+manual bank-name/BIN entry. Map, media and Android Auto projection remain
+unimplemented.
 
 ## Development
 
@@ -37,7 +43,11 @@ Native Android platform files are included; do not regenerate them for each buil
 - `lib/features/dashboard/presentation`: calendar dashboard and payment entry.
 - `lib/features/calendar/domain/lunar_calendar.dart`: pure Dart lunar conversion.
 - `lib/features/payment/domain/viet_qr.dart`: account-transfer TLV and CRC.
-- `lib/features/payment/presentation`: form, card renderer and PNG capture API.
+- `lib/features/payment/presentation`: recipient picker/editor, amount/note form,
+  card renderer and PNG capture API.
+- `lib/core/storage/app_database.dart`: SQLite schema for bank catalog, recipients
+  and calendar events.
+- `assets/data/vietqr_banks.json`: bundled public bank-name/BIN snapshot.
 - `test/`: domain, launch/layout, payment-form and PNG export tests.
 
 Empty directories with `.gitkeep` reserve layers for future implementations.
@@ -70,6 +80,42 @@ no Android Auto car service or manifest integration has been implemented.
 and Overpass are community services with usage policies and incomplete coverage;
 offline maps need an explicit tile source, download policy and cache. A nearby
 `maxspeed` tag alone does not establish the speed limit of the current road.
+
+## Offline bank catalog and saved recipients
+
+The app ships a snapshot of `https://api.vietqr.io/v2/banks`, so the bank picker
+works even on the first launch without Internet. The snapshot records its source
+and fetch timestamp. The account editor's refresh button requests only this public
+bank catalog, validates the complete response and commits it in one transaction.
+Network or invalid-response failures keep the previous offline list intact.
+Recipient/account details are not sent to this API. The release manifest includes
+`INTERNET` permission for that optional refresh; gallery selection uses the platform
+photo picker without a broad storage permission.
+
+Add a recipient once using bank selection, account number and holder name. Save
+multiple recipients, edit them, choose a default or delete one with confirmation.
+Deleting the default promotes another saved recipient, if one exists. Optional
+logos and a default note are saved per recipient. No real account or branding from
+the reference screenshots is prefilled. Daily use needs only recipient selection,
+an amount (including quick-amount buttons) and note, followed by **CẬP NHẬT**.
+**XÓA SỐ TIỀN** generates an open-amount QR. Editing amount/note hides the old QR
+until updating, so an old payment request is not displayed as the new one.
+
+## Personal events
+
+Use **Quản lý sự kiện** on the dashboard. Add, edit or delete an all-day event with
+a title, date and notes. Select **Dương lịch** or **Âm lịch**; lunar input also has
+an explicit leap-month flag and a Gregorian preview. **Lặp hằng năm** keeps the
+chosen calendar date. February 29 and dates in lunar leap months recur only in
+years containing that date; they are not shifted to another day. The dashboard
+shows the next occurrence of each event within 30 days (up to five entries), and
+the management screen includes all events, including past one-off entries.
+
+Event and recipient records survive app restarts and app updates that preserve
+app data. Uninstalling the app or clearing its data removes this local database.
+These are all-day calendar entries; notification alarms are not implemented.
+Tests reopen a real SQLite database, exercise create/edit/delete/default changes,
+check bank-cache failure handling, and cover the UI flows and lunar recurrence.
 
 ## Source ports and validation
 
