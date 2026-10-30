@@ -3,31 +3,33 @@ package vn.thanhtaxixanh.car98g00107.car
 import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
+import androidx.car.app.CarToast
 import androidx.car.app.model.Action
+import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarIcon
+import androidx.core.graphics.drawable.IconCompat
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
-import androidx.car.app.navigation.model.MapController
-import androidx.car.app.navigation.model.MapWithContentTemplate
 import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 
 class TaxiCarScreen(context: CarContext) : Screen(context), DefaultLifecycleObserver {
-    private var panel = CarPanel.OVERVIEW
     private var data: Map<String, Any?> = emptyMap()
     private var mapError: String? = null
     private val renderer = CarSurfaceMap(context, { latitude, longitude ->
         CarRuntime.action("destination", mapOf("latitude" to latitude, "longitude" to longitude))
     }, { message ->
+        if (message != null && message != mapError) CarToast.makeText(carContext, message, CarToast.LENGTH_LONG).show()
         mapError = message
         refresh()
-    })
+    }, { CarRuntime.action(it) })
     private val listener: (Map<String, Any?>) -> Unit = { value ->
         data = value
-        renderer.update(value.section("map"))
+        renderer.render(value)
         refresh()
     }
 
@@ -45,24 +47,29 @@ class TaxiCarScreen(context: CarContext) : Screen(context), DefaultLifecycleObse
     private fun refresh() {
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) invalidate()
     }
-    private fun select(value: CarPanel) {
-        if (carContext.carAppApiLevel >= 7) { panel = value; invalidate() }
-        else screenManager.push(CarDetailScreen(carContext, value))
-    }
     override fun onGetTemplate(): Template {
-        val modes = CarTemplates.modes(carContext, ::select)
-        val mapActions = CarTemplates.mapActions(carContext,
+        fun icon(resource: Int, click: () -> Unit): Action = Action.Builder()
+            .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext, resource)).build())
+            .setOnClickListener(click).build()
+        val actions = ActionStrip.Builder()
+            .addAction(icon(vn.thanhtaxixanh.car98g00107.R.drawable.ic_car_home) { CarRuntime.action("closeYouTube") })
+            .addAction(icon(vn.thanhtaxixanh.car98g00107.R.drawable.ic_car_music) {
+                if (data.section("media")["carVideo"] == true) CarRuntime.action("toggleCarPip")
+                else CarRuntime.action("openYouTube")
+            })
+            .addAction(icon(android.R.drawable.ic_menu_preferences) { screenManager.push(CarSettingsScreen(carContext)) })
+            .build()
+        val media = data.section("media")
+        val mapActions = if (media["carVideo"] == true) ActionStrip.Builder()
+            .addAction(Action.PAN)
+            .addAction(icon(android.R.drawable.ic_media_previous) { CarRuntime.action("previous") })
+            .addAction(icon(if (media["playing"] == true) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play) { CarRuntime.action("playPause") })
+            .addAction(icon(android.R.drawable.ic_media_next) { CarRuntime.action("next") }).build()
+        else CarTemplates.mapActions(carContext,
             { CarRuntime.action("gps"); renderer.recenter() }, renderer::zoom)
-        if (carContext.carAppApiLevel >= 7) {
-            val contents = if (mapError != null) data + ("bridgeMessage" to mapError) else data
-            return MapWithContentTemplate.Builder()
-                .setContentTemplate(CarTemplates.pane(carContext, contents, panel,
-                    { CarRuntime.action(it) }, { screenManager.push(CarRecentScreen(carContext)) }))
-                .setActionStrip(modes)
-                .setMapController(MapController.Builder().setMapActionStrip(mapActions).build())
-                .build()
-        }
-        return NavigationTemplate.Builder().setActionStrip(modes).setMapActionStrip(mapActions).build()
+        // The dashboard owns the split inside the app's available Surface. A
+        // MapWithContentTemplate would let the host rearrange/resize the pane.
+        return NavigationTemplate.Builder().setActionStrip(actions).setMapActionStrip(mapActions).build()
     }
 }
 
@@ -93,6 +100,28 @@ private class CarRecentScreen(context: CarContext) : Screen(context) {
         }
         @Suppress("DEPRECATION")
         return ListTemplate.Builder().setSingleList(list.build()).setTitle("YouTube gần đây")
+            .setHeaderAction(Action.BACK).build()
+    }
+}
+
+private class CarSettingsScreen(context: CarContext) : Screen(context) {
+    override fun onGetTemplate(): Template {
+        val list = ItemList.Builder()
+        list.addItem(Row.Builder().setTitle("Bản đồ trái 60% • Bảng phải 40%")
+            .addText("Chọn tỷ lệ Lịch / QR / Media").build())
+        list.addItem(Row.Builder().setTitle("YouTube gần đây").setOnClickListener {
+            screenManager.push(CarRecentScreen(carContext))
+        }.build())
+        listOf(Triple("QR lớn • 25 / 50 / 25", "qr", "layoutPreset"),
+            Triple("Ba hàng cân đối • 33 / 34 / 33", "balanced", "layoutPreset"),
+            Triple("Ưu tiên lịch • 45 / 35 / 20", "events", "layoutPreset"),
+            Triple("Đổi bản đồ 3D/2D", "", "3d")).forEach { (title, preset, type) ->
+            list.addItem(Row.Builder().setTitle(title).setOnClickListener {
+                CarRuntime.action(type, mapOf("preset" to preset)); finish()
+            }.build())
+        }
+        @Suppress("DEPRECATION")
+        return ListTemplate.Builder().setSingleList(list.build()).setTitle("Bố cục màn hình khách")
             .setHeaderAction(Action.BACK).build()
     }
 }

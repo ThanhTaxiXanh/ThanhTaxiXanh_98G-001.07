@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,7 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../domain/youtube_location.dart';
-import '../domain/youtube_media.dart';
+import '../data/youtube_bridge_codec.dart';
 import 'youtube_browser.dart';
 
 class WebViewYouTubeBrowser implements YouTubeBrowser {
@@ -23,8 +22,16 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
     'assets/scripts/youtube_media.js',
   );
   bool _closed = false;
+  final _bridge = YouTubeBridgeCodec();
+  int _document = 0;
+  bool _playOnReady = false;
   Uri? _mainLocation;
   OnHideCustomWidgetCallback? _hideFullscreen;
+  @override
+  int? get androidViewIdentifier =>
+      _controller.platform is AndroidWebViewController
+      ? (_controller.platform as AndroidWebViewController).webViewIdentifier
+      : null;
 
   @override
   Future<void> initialize(Uri location) async {
@@ -38,23 +45,9 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
             !YouTubeLocation.isContent(_mainLocation!)) {
           return;
         }
-        try {
-          if (message.message.length > 8192) return;
-          final raw = jsonDecode(message.message);
-          if (raw is Map && raw['error'] is String) {
-            callbacks.onError(
-              (raw['error'] as String).substring(
-                0,
-                (raw['error'] as String).length.clamp(0, 200),
-              ),
-            );
-            return;
-          }
-          final media = YouTubeMedia.parse(message.message);
-          callbacks.onMedia?.call(media);
-        } on FormatException {
-          // Never accept arbitrary JavaScript data as a media session command.
-        }
+        final decoded = _bridge.decode(message.message);
+        if (decoded?.error != null) callbacks.onError(decoded!.error!);
+        if (decoded?.media != null) callbacks.onMedia?.call(decoded!.media!);
       },
     );
     await _controller.setNavigationDelegate(
@@ -62,6 +55,12 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
         onNavigationRequest: (request) {
           if (_closed) return NavigationDecision.prevent;
           final uri = Uri.tryParse(request.url);
+          final appLink = uri == null ? null : YouTubeLocation.fromAppLink(uri);
+          if (request.isMainFrame && appLink != null) {
+            _playOnReady = true;
+            unawaited(_controller.loadRequest(appLink));
+            return NavigationDecision.prevent;
+          }
           if (!request.isMainFrame && uri?.scheme == 'https') {
             return NavigationDecision.navigate;
           }
@@ -80,6 +79,8 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
           if (!_closed) callbacks.onProgress(progress);
         },
         onPageStarted: (url) {
+          _document++;
+          _bridge.newDocument();
           _mainLocation = Uri.tryParse(url);
           if (!_closed) callbacks.onProgress(0);
         },
@@ -90,12 +91,27 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
         },
         onPageFinished: (url) async {
           if (_closed) return;
+          final document = _document;
           callbacks.onProgress(100);
           final uri = Uri.tryParse(url);
           if (uri != null) callbacks.onLocation(uri);
           if (uri != null && YouTubeLocation.isContent(uri)) {
             try {
-              await _controller.runJavaScript(await _mediaScript);
+              final script = await _mediaScript;
+              final current = Uri.tryParse(
+                await _controller.currentUrl() ?? '',
+              );
+              if (_closed ||
+                  document != _document ||
+                  current == null ||
+                  !YouTubeLocation.isContent(current)) {
+                return;
+              }
+              await _controller.runJavaScript(_bridge.inject(script));
+              if (_playOnReady) {
+                _playOnReady = false;
+                await play();
+              }
             } catch (_) {
               if (!_closed) {
                 callbacks.onError(
@@ -104,7 +120,7 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
               }
             }
           }
-          if (_closed) return;
+          if (_closed || document != _document) return;
           callbacks.onReady();
         },
         onWebResourceError: (error) {
@@ -127,6 +143,9 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
     );
     final platform = _controller.platform;
     if (platform is AndroidWebViewController) {
+      await platform.setAllowFileAccess(false);
+      await platform.setAllowContentAccess(false);
+      await platform.setMixedContentMode(MixedContentMode.neverAllow);
       // Native media-session play is an explicit user action outside the page.
       await platform.setMediaPlaybackRequiresUserGesture(false);
       await platform.setCustomWidgetCallbacks(
@@ -184,12 +203,13 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
 
   @override
   Future<void> setFiltering(bool enabled) async {
+    final document = _document;
     final current = Uri.tryParse(await _controller.currentUrl() ?? '');
     if (_closed || current == null || !YouTubeLocation.isContent(current)) {
       return;
     }
     final script = await _filterScript;
-    if (_closed) return;
+    if (_closed || document != _document) return;
     await _controller.runJavaScript(script);
     await _controller.runJavaScript(
       'window.taxiYouTubeFilter.setEnabled($enabled);',

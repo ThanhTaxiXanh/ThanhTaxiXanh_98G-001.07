@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../domain/map_models.dart';
+import '../../../core/network/bounded_http.dart';
 
 class OsmMapRepository implements MapRepository {
   OsmMapRepository(this.client, {DateTime Function()? now})
@@ -19,16 +20,14 @@ class OsmMapRepository implements MapRepository {
   TrafficSnapshot? _trafficCache;
 
   Future<Object?> _get(Uri url) async {
-    final response = await client
-        .get(url, headers: _headers)
-        .timeout(const Duration(seconds: 20));
-    if (response.statusCode != 200 ||
-        response.bodyBytes.length > 4 * 1024 * 1024) {
+    try {
+      final bytes = await boundedGet(client, url, headers: _headers);
+      return jsonDecode(utf8.decode(bytes));
+    } on FormatException {
       throw const MapServiceException(
         'Dịch vụ bản đồ tạm thời không phản hồi. Vui lòng thử lại sau.',
       );
     }
-    return jsonDecode(utf8.decode(response.bodyBytes));
   }
 
   GeoPoint _point(Object? lat, Object? lon) {

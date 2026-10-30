@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/android_pip_controller.dart';
 import '../data/youtube_history_repository.dart';
@@ -30,6 +31,9 @@ class YouTubeSessionState {
     this.fullscreen,
     this.message,
     this.recent = const [],
+    this.carVideo = false,
+    this.carPip = false,
+    this.carViewId,
   });
   final bool initialized, canGoBack, inPip, serviceReady;
   final int progress;
@@ -37,6 +41,9 @@ class YouTubeSessionState {
   final Widget? fullscreen;
   final String? message;
   final List<YouTubeMedia> recent;
+  final bool carVideo;
+  final bool carPip;
+  final int? carViewId;
   YouTubeSessionState copy({
     bool? initialized,
     bool? canGoBack,
@@ -49,6 +56,10 @@ class YouTubeSessionState {
     List<YouTubeMedia>? recent,
     bool clearFullscreen = false,
     bool clearMessage = false,
+    bool? carVideo,
+    bool? carPip,
+    int? carViewId,
+    bool clearCarView = false,
   }) => YouTubeSessionState(
     initialized: initialized ?? this.initialized,
     canGoBack: canGoBack ?? this.canGoBack,
@@ -59,6 +70,9 @@ class YouTubeSessionState {
     fullscreen: clearFullscreen ? null : fullscreen ?? this.fullscreen,
     message: clearMessage ? null : message ?? this.message,
     recent: recent ?? this.recent,
+    carVideo: carVideo ?? this.carVideo,
+    carPip: carPip ?? this.carPip,
+    carViewId: clearCarView ? null : carViewId ?? this.carViewId,
   );
 }
 
@@ -71,6 +85,7 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   Future<void> _historyWrites = Future.value();
   StreamSubscription<bool>? _pipSubscription;
   Timer? _remember;
+  Timer? _carAttachTimeout;
   bool _visible = false, _pendingPlay = false;
   int _historyGeneration = 0;
   String? _lastRememberedVideo;
@@ -94,8 +109,10 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
     ref.onDispose(() {
       WidgetsBinding.instance.removeObserver(this);
       _remember?.cancel();
+      _carAttachTimeout?.cancel();
       unawaited(_pipSubscription?.cancel());
       _browser?.close();
+      unawaited(_handler?.disposeResources());
     });
     unawaited(_loadHistory());
     return const YouTubeSessionState();
@@ -153,6 +170,11 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
           },
           onError: showError,
           onFullscreen: (view) {
+            if (view != null && state.carVideo) {
+              _browser?.exitFullscreen();
+              unawaited(_browser?.setCompact(true));
+              return;
+            }
             if (ref.mounted) {
               state = state.copy(
                 fullscreen: view,
@@ -270,7 +292,6 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   }
 
   Future<void> play() async {
-    if (_handler != null && !await _handler!.requestFocus()) return;
     await ensureInitialized();
     try {
       await _browser?.play();
@@ -331,17 +352,22 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   }
 
   Future<void> _configurePip({bool forcePaused = false}) async {
+    if (!ref.mounted) return;
     final settings = ref.read(youTubeSettingsProvider).asData?.value;
     await ref
         .read(pipControllerProvider)
         .configure(
           playing: !forcePaused && state.media?.playing == true,
-          visible: _visible,
+          visible: _visible && !state.carVideo,
           autoEnter: settings?.autoPip ?? true,
         );
   }
 
   Future<void> enterPip() async {
+    if (state.carVideo) {
+      showError('Chuyển video về điện thoại trước khi bật PiP.');
+      return;
+    }
     if (state.media == null) {
       showError('Hãy mở một video trước khi bật PiP.');
       return;
@@ -361,6 +387,7 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
     final settings = ref.read(youTubeSettingsProvider).asData?.value;
     if (state == AppLifecycleState.paused &&
         settings?.backgroundAudio == false &&
+        !this.state.carVideo &&
         !this.state.inPip) {
       unawaited(pause());
     }
@@ -368,5 +395,85 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
       unawaited(applyFiltering());
       unawaited(_configurePip());
     }
+  }
+
+  Future<void> showOnCar(bool enabled) async {
+    _carAttachTimeout?.cancel();
+    if (!enabled) {
+      try {
+        await const MethodChannel(
+          'vn.thanhtaxixanh/car',
+        ).invokeMethod<void>('releaseCarVideo');
+      } on MissingPluginException {
+        /* Phone-only/test engine. */
+      } on PlatformException {
+        showError('Chưa chuyển được video về điện thoại. Thử lại.');
+        return;
+      }
+      if (!ref.mounted) return;
+      state = state.copy(carVideo: false, carPip: false, clearCarView: true);
+      await _browser?.setCompact(state.inPip).catchError((Object _) {});
+      unawaited(_configurePip());
+      return;
+    }
+    await ensureInitialized();
+    final id = _browser?.androidViewIdentifier;
+    if (!ref.mounted) return;
+    if (id == null) {
+      showError('Chưa kết nối được trình phát với màn hình khách.');
+      return;
+    }
+    _browser?.exitFullscreen();
+    state = state.copy(
+      carVideo: true,
+      clearCarView: true,
+      clearFullscreen: true,
+    );
+    // Let Flutter detach the phone platform view before the car reparents it.
+    // A car-first headless engine may not produce a frame yet.
+    try {
+      await WidgetsBinding.instance.endOfFrame.timeout(
+        const Duration(milliseconds: 350),
+      );
+    } on TimeoutException {
+      /* No attached phone view. */
+    }
+    if (!ref.mounted || !state.carVideo) return;
+    try {
+      await const MethodChannel(
+        'vn.thanhtaxixanh/car',
+      ).invokeMethod<void>('prepareCarVideo');
+    } on MissingPluginException {
+      /* Test engine. */
+    } on PlatformException {
+      await showOnCar(false);
+      showError('Chưa kết nối được trình phát với màn hình khách.');
+      return;
+    }
+    if (!ref.mounted || !state.carVideo) return;
+    state = state.copy(carViewId: id);
+    unawaited(_configurePip());
+    _carAttachTimeout = Timer(const Duration(seconds: 8), () {
+      if (ref.mounted && state.carVideo) {
+        unawaited(showOnCar(false));
+        showError(
+          'Màn hình khách chưa nhận trình phát. Video đã chuyển về điện thoại.',
+        );
+      }
+    });
+  }
+
+  void confirmCarVideo(int id) {
+    if (state.carVideo && state.carViewId == id) _carAttachTimeout?.cancel();
+  }
+
+  Future<void> toggleCarPip() async {
+    if (!state.carVideo || state.media == null) {
+      showError('Chọn một video trước khi thu nhỏ.');
+      return;
+    }
+    final mini = !state.carPip;
+    await _browser?.setCompact(mini);
+    if (ref.mounted) state = state.copy(carPip: mini);
   }
 }

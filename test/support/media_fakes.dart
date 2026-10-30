@@ -56,6 +56,9 @@ class FakePipController implements PipController {
 }
 
 class FakeYouTubeBrowser implements YouTubeBrowser {
+  int? viewIdentifier = 42;
+  @override
+  int? get androidViewIdentifier => viewIdentifier;
   FakeYouTubeBrowser(this.callbacks);
   final YouTubeBrowserCallbacks callbacks;
   final locations = <Uri>[];

@@ -34,11 +34,16 @@ import kotlin.math.ln
 class CarSurfaceMap(
     private val context: CarContext,
     private val destination: (Double, Double) -> Unit,
-    private val error: (String?) -> Unit
+    private val error: (String?) -> Unit,
+    private val command: (String) -> Unit
 ) : SurfaceCallback {
     private var display: VirtualDisplay? = null
     private var presentation: Presentation? = null
     private var view: MapView? = null
+    private var dashboard: CarDashboardLayout? = null
+    private var snapshot: Map<String, Any?> = emptyMap()
+    private var videoId: Long? = null
+    private val videoDetach: () -> Unit = { dashboard?.releaseVideo(); videoId = null }
     private var map: MapLibreMap? = null
     private var style: Style? = null
     private var width = 0
@@ -69,14 +74,20 @@ class CarSurfaceMap(
                 MapLibreMapOptions.createFromAttributes(window.context).textureMode(true))
             view = mapView
             presentation = window
-            window.setContentView(mapView)
+            val dashboardView = CarDashboardLayout(window.context, mapView, command)
+            dashboard = dashboardView
+            dashboardView.render(snapshot)
+            visibleArea?.let { dashboardView.visibleArea(it) }
+            window.setContentView(dashboardView)
             window.window?.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
             window.show()
+            CarRuntime.detachVideo = videoDetach
+            render(snapshot)
             mapView.onCreate(Bundle())
             mapView.onStart()
             mapView.onResume()
             mapView.addOnDidFailLoadingMapListener {
-                error("Không tải được bản đồ. Kiểm tra Internet rồi mở lại bản đồ.")
+                if (version == generation) error("Không tải được bản đồ. Kiểm tra Internet rồi mở lại bản đồ.")
             }
             mapView.getMapAsync { ready ->
                 if (version != generation) return@getMapAsync
@@ -116,7 +127,30 @@ class CarSurfaceMap(
         }
     }
 
-    fun update(value: Map<String, Any?>) {
+    fun render(value: Map<String, Any?>) {
+        snapshot = value
+        dashboard?.render(value)
+        val media = value.section("media")
+        val id = media.number("viewId")?.toLong()
+        val dashboard = dashboard
+        if (dashboard != null && CarRuntime.videoEnabled && media["carVideo"] == true && id != null) {
+            if (videoId != id) {
+                videoId = id
+                try {
+                    val browser = CarRuntime.webView(id) ?: throw IllegalStateException("Player unavailable")
+                    dashboard.showVideo(browser)
+                    CarRuntime.action("videoAttached", mapOf("id" to id))
+                } catch (_: RuntimeException) {
+                    dashboard.releaseVideo()
+                    CarRuntime.action("videoAttachFailed")
+                }
+            }
+            dashboard.setMiniVideo(media["carPip"] == true)
+        } else if (!CarRuntime.videoEnabled || media["carVideo"] != true) videoDetach()
+        update(value.section("map"))
+    }
+
+    private fun update(value: Map<String, Any?>) {
         data = value
         val map = map ?: return
         val style = style ?: return
@@ -133,7 +167,7 @@ class CarSurfaceMap(
                 if (endpoint == null) EMPTY else feature("Point", endpoint))
             val route = value["route"] as? List<*> ?: emptyList<Any>()
             val routeKey = JSONArray(route).toString()
-            style.getSourceAs<GeoJsonSource>("taxi-route")?.setGeoJson(
+            if (routeKey != lastRoute) style.getSourceAs<GeoJsonSource>("taxi-route")?.setGeoJson(
                 if (route.size < 2) EMPTY else feature("LineString", route))
             if (route.size >= 2 && routeKey != lastRoute) {
                 val bounds = LatLngBounds.Builder()
@@ -161,38 +195,39 @@ class CarSurfaceMap(
 
     fun recenter() { follow = true; update(data) }
     fun zoom(delta: Double) {
+        follow = false
         val current = map ?: return
         current.moveCamera(CameraUpdateFactory.zoomTo((current.cameraPosition.zoom + delta).coerceIn(2.0, 20.0)))
     }
     override fun onScroll(distanceX: Float, distanceY: Float) {
+        if (videoId != null && snapshot.section("media")["carPip"] != true) { dashboard?.scrollVideo(distanceX.toInt(), distanceY.toInt()); return }
         follow = false
         map?.scrollBy(distanceX, distanceY)
     }
     override fun onScale(focusX: Float, focusY: Float, scaleFactor: Float) {
+        if (videoId != null && snapshot.section("media")["carPip"] != true) return
         if (scaleFactor.isFinite() && scaleFactor > 0f) zoom(ln(scaleFactor.toDouble()) / ln(2.0))
     }
     override fun onClick(x: Float, y: Float) {
         val now = SystemClock.uptimeMillis()
         val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
         val up = MotionEvent.obtain(now, now + 30, MotionEvent.ACTION_UP, x, y, 0)
-        try { view?.dispatchTouchEvent(down); view?.dispatchTouchEvent(up) }
+        try { dashboard?.dispatchTouchEvent(down); dashboard?.dispatchTouchEvent(up) }
         finally { down.recycle(); up.recycle() }
     }
     override fun onVisibleAreaChanged(area: Rect) { visibleArea = Rect(area); applyVisibleArea() }
     private fun applyVisibleArea() {
-        val area = visibleArea ?: return
-        if (!area.isEmpty) {
-            val right = (width - area.right).coerceAtLeast(0)
-            val bottom = (height - area.bottom).coerceAtLeast(0)
-            map?.setPadding(area.left, area.top, right, bottom)
-            map?.uiSettings?.setAttributionMargins(area.left + 8, area.top + 8, right + 8, bottom + 8)
-            map?.uiSettings?.setLogoMargins(area.left + 8, area.top + 8, right + 8, bottom + 8)
-        }
+        visibleArea?.let { dashboard?.visibleArea(it) }
+        map?.setPadding(0, 0, 0, 0)
+        map?.uiSettings?.setAttributionMargins(8, 8, 8, 8)
+        map?.uiSettings?.setLogoMargins(8, 8, 8, 8)
     }
     override fun onSurfaceDestroyed(container: SurfaceContainer) { release() }
     fun close() { release() }
     private fun release() {
         generation++
+        videoDetach()
+        if (CarRuntime.detachVideo === videoDetach) CarRuntime.detachVideo = null
         map = null
         style = null
         try {
@@ -203,6 +238,7 @@ class CarSurfaceMap(
             // A failed/partly created virtual display still needs releasing.
         }
         view = null
+        dashboard = null
         try { presentation?.dismiss() } catch (_: RuntimeException) {}
         presentation = null
         try { display?.release() } catch (_: RuntimeException) {}

@@ -48,6 +48,11 @@ flutter {
 }
 
 dependencies {
+    constraints {
+        implementation("com.google.guava:guava:33.7.2-android") {
+            because("Patch temporary-file disclosures and unsafe collection deserialization advisories")
+        }
+    }
     implementation("androidx.car.app:app:1.7.0")
     implementation("org.maplibre.gl:android-sdk-opengl:13.5.0")
     testImplementation("junit:junit:4.13.2")

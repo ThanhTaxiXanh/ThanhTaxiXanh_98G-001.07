@@ -7,53 +7,29 @@ import 'youtube_session.dart';
 
 /// Publishes actual browser playback to Android's MediaSession/MediaBrowser.
 class TaxiAudioHandler extends BaseAudioHandler {
-  TaxiAudioHandler(this.session, {this._activateFocus});
+  TaxiAudioHandler(this.session);
   final YouTubeSession session;
-  final Future<bool> Function()? _activateFocus;
-  AudioSession? _focus;
-  Future<bool>? _focusRequest;
   final _subscriptions = <StreamSubscription<dynamic>>[];
   List<YouTubeMedia> _recent = [];
   DateTime? _lastPositionUpdate;
   final _recentChanges = BehaviorSubject<Map<String, dynamic>>.seeded({});
 
-  Future<void> initializeFocus() async {
-    _focus = await AudioSession.instance;
-    await _focus!.configure(const AudioSessionConfiguration.music());
+  Future<void> initializeAudioEvents() async {
+    final audio = await AudioSession.instance;
+    // Android WebView/Chromium owns audio focus for its media element. A
+    // second AudioSession.setActive request can suspend that same WebView.
     _subscriptions.add(
-      _focus!.interruptionEventStream.listen((event) {
-        if (event.begin) unawaited(pause());
-      }),
-    );
-    _subscriptions.add(
-      _focus!.becomingNoisyEventStream.listen((_) {
+      audio.becomingNoisyEventStream.listen((_) {
         unawaited(pause());
       }),
     );
   }
 
-  Future<bool> requestFocus() => _focusRequest ??= _requestFocus().whenComplete(
-    () => _focusRequest = null,
-  );
-
-  Future<bool> _requestFocus() async {
-    var allowed = false;
-    try {
-      allowed =
-          await (_activateFocus?.call() ??
-              _focus?.setActive(true) ??
-              Future.value(true));
-    } catch (_) {
-      // A missing/failed platform focus request must not allow playback.
+  Future<void> disposeResources() async {
+    for (final subscription in _subscriptions) {
+      await subscription.cancel();
     }
-    if (!allowed) {
-      session.showError('Thiết bị chưa cấp quyền phát âm thanh lúc này.');
-    }
-    return allowed;
-  }
-
-  Future<void> _focusForBrowserPlayback() async {
-    if (!await requestFocus()) await pause();
+    await _recentChanges.close();
   }
 
   MediaItem _item(YouTubeMedia media) => MediaItem(
@@ -97,10 +73,6 @@ class TaxiAudioHandler extends BaseAudioHandler {
   }
 
   void acceptMedia(YouTubeMedia media) {
-    // Playback can start inside the web page without a MediaSession command.
-    if (media.playing && !media.ended && !playbackState.value.playing) {
-      unawaited(_focusForBrowserPlayback());
-    }
     final previous = mediaItem.value;
     if (previous?.id != 'youtube:${media.id}' ||
         previous?.title != media.title ||
@@ -162,7 +134,6 @@ class TaxiAudioHandler extends BaseAudioHandler {
         processingState: AudioProcessingState.idle,
       ),
     );
-    unawaited(_focus?.setActive(false));
   }
 
   @override

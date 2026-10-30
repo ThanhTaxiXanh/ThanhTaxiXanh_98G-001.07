@@ -21,7 +21,7 @@ Future<void> main() async {
       ),
     );
     session.attachHandler(handler);
-    await handler.initializeFocus();
+    await handler.initializeAudioEvents();
   } catch (_) {
     session.showError(
       'Chưa khởi tạo được dịch vụ phát nền. Bạn vẫn có thể mở YouTube.',

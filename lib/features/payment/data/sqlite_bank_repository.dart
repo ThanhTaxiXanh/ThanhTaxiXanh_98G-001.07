@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:sqflite/sqflite.dart';
 
 import '../domain/bank.dart';
+import '../../../core/network/bounded_http.dart';
 
 class SqliteBankRepository implements BankRepository {
   SqliteBankRepository(this.db, this.client, this.loadSeed);
@@ -45,14 +46,13 @@ class SqliteBankRepository implements BankRepository {
 
   @override
   Future<BankCatalog> refresh() async {
-    final response = await client
-        .get(endpoint)
-        .timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200) {
-      throw const FormatException('Bank API failed.');
-    }
-    final json =
-        jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    final bytes = await boundedGet(
+      client,
+      endpoint,
+      maxBytes: 512 * 1024,
+      timeout: const Duration(seconds: 15),
+    );
+    final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
     if (json['code'] != '00') {
       throw const FormatException('Bank API rejected request.');
     }
@@ -64,7 +64,7 @@ class SqliteBankRepository implements BankRepository {
   }
 
   List<Bank> _parseBanks(Object? raw) {
-    if (raw is! List || raw.isEmpty) {
+    if (raw is! List || raw.isEmpty || raw.length > 500) {
       throw const FormatException('Empty bank list.');
     }
     final bins = <String>{};
@@ -79,10 +79,13 @@ class SqliteBankRepository implements BankRepository {
           !bins.add(bin) ||
           name is! String ||
           name.trim().isEmpty ||
+          name.length > 200 ||
           shortName is! String ||
           shortName.trim().isEmpty ||
+          shortName.length > 100 ||
           code is! String ||
-          code.trim().isEmpty) {
+          code.trim().isEmpty ||
+          code.length > 50) {
         throw const FormatException('Invalid bank record.');
       }
       return Bank(bin: bin, name: name, shortName: shortName, code: code);

@@ -16,8 +16,10 @@ manual bank-name/BIN entry. A MapLibre 3D map, foreground GPS, address search an
 A passenger YouTube browser now has a shared background playback session,
 Android picture-in-picture and MediaSession/MediaBrowser integration. Android
 Auto has an audio browser and a native map/dashboard template service.
-YouTube video/PiP on the projected car screen remains **unresolved**; the audio
-media service does not transport video.
+Version 0.5.0 adds an app-owned passenger dashboard and transfers the same
+WebView between phone and car, including a small in-app video mode. These car
+rendering paths require acceptance on the actual receiver; media-service audio
+alone does not transport video.
 
 ## Development
 
@@ -30,13 +32,16 @@ flutter analyze
 flutter test
 node --test scripts/*.test.mjs
 dart run tool/generate_car_qr_fixture.dart
+flutter build apk --debug --config-only --no-pub --target-platform android-arm64
 (cd android && ./gradlew :app:testDebugUnitTest --no-daemon)
 flutter run
 flutter build apk --release --split-per-abi
 ```
 
-`pubspec.yaml` lists the dependencies requested by the Master Prompt. Calendar, payment and Riverpod are integrated; other feature dependencies
-are reserved for later implementation. Commit `pubspec.lock` when updating packages.
+`pubspec.yaml` contains the runtime packages actually used. The car adapter uses
+native AndroidX Car App Library; 0.5.0 removes the unused mt_carplay, flutter_map,
+latlong2, vietqr_widget and just_audio declarations and their unused transitives.
+Commit `pubspec.lock` when updating packages.
 Native Android platform files are included; do not regenerate them for each build.
 
 ## Structure
@@ -83,14 +88,20 @@ MainActivity. A car can browse up to 20 recent played videos and send
 play/pause/seek/previous/next/stop commands. A cold car launch loads recent public
 video IDs from preferences without needing an Activity or Google sign-in.
 
-`TaxiCarService` uses AndroidX Car App Library navigation templates and a
-MapLibre renderer on the surface supplied by the car host. API 7+ combines the map
-with an overview containing Gregorian/lunar dates, an event countdown, VietQR and
-media status/actions. Home/Lịch/QR/Media actions open the detailed panels. Older
-hosts use a navigation map with separate detail screens. The host controls pane
-placement, scaling and content limits; the phone's 60/40 Flutter layout is not a
-fixed pixel layout on Android Auto. The existing mt_carplay dependency does not
-provide the map surface adapter, so that adapter is native AndroidX code.
+`TaxiCarService` uses a navigation template with an app-owned passenger surface.
+Within the host's visible app area, `CarDashboardLayout` places MapLibre on the
+left (60%) and calendar/events, payment QR and media in three rows on the right
+(40%). Row weights default to 25/50/25 and can be changed in Settings on the phone
+or with car presets. Host system bars and whether the app is available remain
+outside this layout's control.
+
+The action strip contains Home, YouTube and Settings. YouTube reparents the same
+WebView through the plugin's documented Android external API; the phone detaches
+its platform view first. Native acknowledgement and timeout restore phone output
+if the receiver cannot attach it. Press YouTube again for small/full video inside
+the app, Home for the dashboard, and Settings for recent videos and row presets.
+Only one screen owns the WebView at a time. This custom passenger surface has not
+been certified for Play or verified on the target receiver.
 
 The car renderer retains native attribution, follows requested GPS fixes, shows
 route geometry, supports pan/zoom/3D/2D and lets a map tap choose a destination.
@@ -250,7 +261,7 @@ The YouTube browser is owned by a process-level Riverpod session. Leaving its
 phone route, switching apps or locking the screen no longer closes/pauses it by
 default. A real media foreground service publishes playback, metadata and recent
 videos. Notification/lock-screen/Android Auto commands control the same browser.
-Calls/audio-focus interruptions and headphone disconnect pause playback.
+Chromium owns audio focus for its WebView player. The app observes headphone disconnect and forwards explicit pause/stop; it does not request competing audio focus.
 The phone dashboard contains a compact media card for returning to the player.
 
 Use the **PiP** action after opening a video. MainActivity declares native Android
@@ -264,7 +275,9 @@ video if the page pauses it when hidden. Native pause/stop and ended videos are
 respected. It does not spoof document visibility, extract streams or unlock
 restricted videos. YouTube/account restrictions and device battery policies can
 still interrupt background playback; the actual Redmi/receiver needs a live
-check. Android Auto receives an audio media surface, not an Android PiP window.
+check. The Android Auto music entry controls audio. The car app's YouTube action uses
+the passenger surface; its small mode is inside this app's area, not a system
+Android Auto PiP window.
 
 ## Passenger YouTube browser (experimental)
 
@@ -277,14 +290,10 @@ Opening the app or a car template alone does not create a browser or fabricate
 playing state; real media events drive the notification and car controls.
 
 The shield action toggles the experimental ad filter. Its JavaScript hides known
-promoted-card/overlay elements and attempts to skip a playing video only when
-YouTube positively marks the player as showing an ad. Ordinary/paused videos and
-unknown/live durations are not sought. A previous mute state is restored when an
-ad ends or the filter is disabled. It does not remove creator sponsorships,
-patch the YouTube APK, extract streams or intercept network responses. YouTube's
-markup and ad delivery change: **ad-free playback is not guaranteed or verified
-on the actual website**, and filtering can break playback. Turn it off to
-diagnose a playback problem. This is not a completed 100% ad-free requirement.
+promoted elements and clicks a visible skip control only when YouTube marks the
+player as showing an ad. It never seeks or mutes the video, avoiding the previous
+preroll stall risk. **Removal of every live ad is not guaranteed.** Turn the filter
+off to diagnose a website issue.
 
 Preferences retain filter/background/PiP choices, one sanitized public YouTube
 location and up to 20 played-video IDs/titles. Account credentials and sign-in
@@ -298,9 +307,9 @@ default behavior.
 
 **Current target:** a passenger-only receiver connected to a Xiaomi Redmi Note
 12 Pro, Android 13, Android Auto 18.1.164344. Android phone PiP, car audio and
-navigation-template code are implemented. Projected YouTube video and PiP on
-Android Auto are not implemented. The receiver's app availability and composition
-remain host-controlled.
+navigation and shared WebView passenger-surface code are implemented. The receiver's
+app availability, rendering support and installation trust still require a physical
+check. See the 0.5.0 guide before treating the car video requirement as accepted.
 
 See [YouTube compatibility and remaining acceptance checks](docs/youtube-compatibility.md).
 Flutter tests cover URL boundaries, settings persistence, ordered writes, browser
@@ -310,3 +319,16 @@ actual scripts against simulated ad/non-ad/background player states. Native test
 verify manifest services/PiP, pane content limits, stale-QR handling and decoding
 an Android-rendered bitmap from the current Dart QR encoder using ZXing. These
 checks do not validate live YouTube ads, the physical screen or car video.
+
+## 0.5.0 review and additional checks
+
+See the Vietnamese [source/security review](docs/source-security-review.md) and
+[phone/car acceptance guide](docs/youtube-compatibility.md). The review covers
+all application modules and distinguishes source findings, test observations and
+unverified device behavior. Guava is constrained to the patched Android version.
+
+Optional real-browser fixture check (Python Playwright, Chromium and ffmpeg):
+`python3 tool/browser_smoke.py`. It uses local HTML5 media with the actual shipped
+scripts, not the live YouTube service. For OSV checks, generate a Gradle
+`releaseRuntimeClasspath` dependency report and pass its path to
+`python3 tool/audit_dependencies.py <report-path>`.

@@ -1,7 +1,7 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -136,35 +136,77 @@ void main() {
   );
 
   test(
-    'starting playback in the web page requests focus and pauses on denial',
+    'browser playback and transport controls do not claim competing focus',
     () async {
+      final calls = <String>[];
+      const channel = MethodChannel('com.ryanheise.audio_session');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
       final session = container.read(youTubeSessionProvider.notifier);
-      final focus = Completer<bool>();
-      var requests = 0;
-      final handler = TaxiAudioHandler(
-        session,
-        activateFocus: () {
-          requests++;
-          return focus.future;
-        },
-      );
+      final handler = TaxiAudioHandler(session);
       session.attachHandler(handler);
+      await handler.initializeAudioEvents();
       await session.ensureInitialized();
       browser.report(video('abcdefghijk'));
-      browser.report(video('abcdefghijk'));
-      expect(requests, 1);
-      expect(handler.playbackState.value.playing, isTrue);
-      focus.complete(false);
       await Future<void>.delayed(Duration.zero);
-      expect(browser.pauses, greaterThan(0));
-      expect(handler.playbackState.value.playing, isFalse);
-      expect(container.read(youTubeSessionProvider).media?.playing, isFalse);
-      expect(
-        container.read(youTubeSessionProvider).message,
-        contains('quyền phát âm thanh'),
-      );
+      expect(browser.pauses, 0);
+      expect(handler.playbackState.value.playing, isTrue);
+      await handler.pause();
+      await handler.play();
+      browser.report(video('abcdefghijk'));
+      expect(browser.plays, 1);
+      expect(handler.playbackState.value.playing, isTrue);
+      expect(calls, isNot(contains('setConfiguration')));
     },
   );
+
+  test(
+    'car output handoff disables phone PiP and detaches before restoring phone',
+    () async {
+      const channel = MethodChannel('vn.thanhtaxixanh/car');
+      final calls = <String>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final session = container.read(youTubeSessionProvider.notifier);
+      await session.ensureInitialized();
+      session.setVisible(true);
+      browser.report(video('abcdefghijk'));
+      await session.showOnCar(true);
+      session.confirmCarVideo(42);
+      expect(container.read(youTubeSessionProvider).carViewId, 42);
+      expect(pip.configurations.last['visible'], isFalse);
+      await session.toggleCarPip();
+      expect(container.read(youTubeSessionProvider).carPip, isTrue);
+      await session.showOnCar(false);
+      expect(calls, ['prepareCarVideo', 'releaseCarVideo']);
+      expect(container.read(youTubeSessionProvider).carVideo, isFalse);
+      expect(container.read(youTubeSessionProvider).carViewId, isNull);
+      expect(container.read(youTubeSessionProvider).carPip, isFalse);
+      expect(container.read(youTubeSessionProvider).media?.playing, isTrue);
+    },
+  );
+  test('unsupported car output keeps the phone player available', () async {
+    final session = container.read(youTubeSessionProvider.notifier);
+    await session.ensureInitialized();
+    browser.viewIdentifier = null;
+    await session.showOnCar(true);
+    expect(container.read(youTubeSessionProvider).carVideo, isFalse);
+    expect(
+      container.read(youTubeSessionProvider).message,
+      contains('Chưa kết nối'),
+    );
+    expect(browser.closed, isFalse);
+  });
 
   test(
     'skip progresses through the queue even when recent history reorders',

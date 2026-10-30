@@ -151,6 +151,8 @@ class _MemorySettings implements YouTubeSettingsRepository {
 }
 
 class _Browser implements YouTubeBrowser {
+  @override
+  int? get androidViewIdentifier => 42;
   _Browser(this.callbacks);
   final YouTubeBrowserCallbacks callbacks;
   final locations = <Uri>[];

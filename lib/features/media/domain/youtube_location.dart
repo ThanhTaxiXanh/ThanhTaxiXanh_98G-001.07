@@ -60,6 +60,24 @@ class YouTubeLocation {
     return Uri.https('m.youtube.com', '/results', {'search_query': value});
   }
 
+  /// Convert only public YouTube app links; never follow intent fallbacks.
+  static Uri? fromAppLink(Uri uri) {
+    if (!{'intent', 'vnd.youtube'}.contains(uri.scheme) ||
+        uri.userInfo.isNotEmpty) {
+      return null;
+    }
+    final host = uri.host.toLowerCase();
+    final bareId = uri.scheme == 'vnd.youtube' && host.isEmpty
+        ? uri.path
+        : null;
+    if (bareId == null && !_contentHosts.contains(host) && host != 'watch') {
+      return null;
+    }
+    final id = bareId ?? uri.queryParameters['v'];
+    if (id == null || !RegExp(r'^[a-zA-Z0-9_-]{11}$').hasMatch(id)) return null;
+    return Uri.https('m.youtube.com', '/watch', {'v': id});
+  }
+
   /// Retains only playback/search parameters, never Google sign-in redirects,
   /// credentials, fragments or tracking parameters.
   static Uri? forStorage(Uri uri) {

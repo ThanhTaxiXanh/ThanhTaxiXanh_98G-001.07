@@ -8,8 +8,6 @@
   var observer = null;
   var queued = false;
   var style = null;
-  var mutedVideo = null;
-  var originalMuted = false;
   var selectors = [
     'ytm-promoted-sparkles-web-renderer',
     'ytm-promoted-video-renderer',
@@ -22,13 +20,6 @@
     '.ytp-ad-overlay-container'
   ];
 
-  function restoreAudio() {
-    if (mutedVideo) {
-      mutedVideo.muted = originalMuted;
-      mutedVideo = null;
-    }
-  }
-
   function tick() {
     if (!enabled) return;
     // Do not seek a normal video just because a hidden skip button exists.
@@ -36,27 +27,16 @@
       '#movie_player.ad-showing, #movie_player.ad-interrupting, ' +
       '.html5-video-player.ad-showing, .html5-video-player.ad-interrupting'
     );
-    if (!player) {
-      restoreAudio();
-      return;
-    }
+    if (!player) return;
     var video = player.querySelector('video');
     if (!video || video.ended || video.paused) return;
     var skip = player.querySelector(
       '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button'
     );
     if (skip && skip.getClientRects().length > 0 && !skip.disabled) skip.click();
-    if (mutedVideo !== video) {
-      restoreAudio();
-      mutedVideo = video;
-      originalMuted = video.muted;
-    }
-    video.muted = true;
-    // Live/unknown durations cannot be skipped safely.
-    if (Number.isFinite(video.duration) && video.duration > 0 &&
-        video.currentTime < video.duration - 0.1) {
-      try { video.currentTime = Math.max(0, video.duration - 0.05); } catch (_) {}
-    }
+    // Use only the page's visible skip control. Seeking/muting an ad's media
+    // element can leave YouTube's player state stalled after a preroll.
+
   }
 
   function queueTick() {
@@ -76,7 +56,6 @@
     timer = null;
     if (style) style.remove();
     style = null;
-    restoreAudio();
     if (!enabled) return;
     style = document.createElement('style');
     style.id = 'taxi-youtube-filter-style';

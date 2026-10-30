@@ -50,13 +50,13 @@ test('an ordinary video is never sought, muted or skipped', () => {
   assert.equal(p.state.styles.length, 1);
 });
 
-test('positive ad state skips a finite ad and restores the original mute state', () => {
+test('positive ad state uses the visible skip control without seeking or muting', () => {
   for (const muted of [true, false]) {
     const p = page({ ad: true, duration: 30, muted });
     p.filter.setEnabled(true);
     assert.equal(p.state.clicks, 1);
-    assert.equal(p.video.currentTime, 29.95);
-    assert.equal(p.video.muted, true);
+    assert.equal(p.video.currentTime, 10);
+    assert.equal(p.video.muted, muted);
     p.state.ad = false;
     p.tick();
     assert.equal(p.video.muted, muted);

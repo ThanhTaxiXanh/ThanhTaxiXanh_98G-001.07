@@ -7,6 +7,7 @@ import '../../payment/presentation/payment_screen.dart';
 import '../../map/presentation/driving_map.dart';
 import '../../media/presentation/youtube_screen.dart';
 import '../../media/presentation/media_card.dart';
+import '../../settings/presentation/settings_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -17,6 +18,13 @@ class DashboardScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Thanh Taxi Xanh'),
         actions: [
+          IconButton(
+            tooltip: 'Cài đặt',
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+            ),
+          ),
           IconButton(
             key: const Key('open-youtube'),
             tooltip: 'YouTube dành cho khách',

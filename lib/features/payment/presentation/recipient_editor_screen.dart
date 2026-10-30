@@ -90,6 +90,10 @@ class _RecipientEditorScreenState extends ConsumerState<RecipientEditorScreen> {
         imageQuality: 85,
       );
       if (image == null) return;
+      if (await image.length() > 2 * 1024 * 1024) {
+        _showError('Vui lòng chọn ảnh logo nhỏ hơn 2 MB.');
+        return;
+      }
       final bytes = await image.readAsBytes();
       if (bytes.length > 2 * 1024 * 1024) {
         _showError('Vui lòng chọn ảnh logo nhỏ hơn 2 MB.');

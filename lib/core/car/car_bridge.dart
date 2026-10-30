@@ -10,6 +10,7 @@ import '../../features/payment/domain/viet_qr.dart';
 import '../../features/payment/presentation/payment_preview.dart';
 import '../../features/payment/presentation/payment_providers.dart';
 import 'car_snapshot.dart';
+import '../../features/settings/presentation/layout_settings.dart';
 
 class CarBridge {
   CarBridge(this.container, {MethodChannel? channel})
@@ -37,6 +38,7 @@ class CarBridge {
     final type = command['type'];
     if (type == 'connect') _connect();
     if (type == 'disconnect') {
+      await container.read(youTubeSessionProvider.notifier).showOnCar(false);
       _connected = false;
       for (final listener in _listeners) {
         listener.close();
@@ -84,6 +86,29 @@ class CarBridge {
       await media.skip(-1);
     } else if (type == 'stop') {
       await media.stop();
+    } else if (type == 'openYouTube') {
+      await media.showOnCar(true);
+    } else if (type == 'closeYouTube') {
+      await media.showOnCar(false);
+    } else if (type == 'toggleCarPip') {
+      await media.toggleCarPip();
+    } else if (type == 'videoAttached' && command['id'] is int) {
+      media.confirmCarVideo(command['id'] as int);
+    } else if (type == 'videoAttachFailed') {
+      await media.showOnCar(false);
+      media.showError(
+        'Bộ nhận chưa hiển thị được trình phát. Video đã chuyển về điện thoại.',
+      );
+    } else if (type == 'layoutPreset') {
+      final preset = switch (command['preset']) {
+        'balanced' => DashboardLayout.balanced,
+        'events' => DashboardLayout.events,
+        'qr' => DashboardLayout.qr,
+        _ => null,
+      };
+      if (preset != null) {
+        await container.read(layoutSettingsProvider.notifier).save(preset);
+      }
     }
     final snapshot = buildSnapshot();
     if (_connected) unawaited(publish());
@@ -104,6 +129,7 @@ class CarBridge {
       container.listen(youTubeSessionProvider, changed),
       container.listen(calendarClockProvider, changed),
       container.listen(paymentPreviewProvider, changed),
+      container.listen(layoutSettingsProvider, changed),
     ]);
   }
 
@@ -144,6 +170,10 @@ class CarBridge {
     final media = container.read(youTubeSessionProvider);
     final active = media.media;
     return {
+      'layout':
+          (container.read(layoutSettingsProvider).asData?.value ??
+                  DashboardLayout.qr)
+              .toJson(),
       'calendarTitle': '${today.day}/${today.month}/${today.year}',
       'lunarLabel':
           '${lunar.day}/${lunar.month} Âm lịch • ${calendar.canChi(lunar.year)}',
@@ -151,7 +181,8 @@ class CarBridge {
         for (final event in events.take(2))
           {
             'title': event.title(calendar),
-            'detail': '${event.countdown(today)} • ${event.solarLabel}',
+            'detail':
+                '${event.countdown(today)} • ${event.solarLabel} • ${event.lunarLabel(calendar)}',
           },
       ],
       'payment': {
@@ -170,6 +201,9 @@ class CarBridge {
             : '',
       },
       'media': {
+        'carVideo': media.carVideo,
+        'carPip': media.carPip,
+        'viewId': media.carViewId,
         'title': active?.title ?? 'YouTube',
         'artist':
             active?.artist ?? 'Chọn video trên điện thoại hoặc Video gần đây',

@@ -22,6 +22,7 @@ class YouTubeBrowserCallbacks {
 }
 
 abstract interface class YouTubeBrowser {
+  int? get androidViewIdentifier;
   Widget buildView(BuildContext context);
   Future<void> initialize(Uri location);
   Future<void> load(Uri location);

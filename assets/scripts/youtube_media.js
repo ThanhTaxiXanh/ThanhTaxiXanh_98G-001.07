@@ -1,5 +1,6 @@
-(function () {
+(function (bridgeToken) {
   'use strict';
+  if (window.top && window.top !== window) return;
   if (window.taxiYouTubeMedia) return;
   var attached = new WeakSet();
   var compact = false;
@@ -7,6 +8,7 @@
   var backgroundAudio = true;
   var desiredPlaying = false;
   var backgroundResumeAttempted = false;
+  var backgroundSince = 0;
   var style = document.createElement('style');
   style.textContent =
     'html[data-taxi-compact] body{background:#000!important;margin:0!important;}' +
@@ -20,7 +22,8 @@
   (document.head || document.documentElement).appendChild(style);
 
   function send(value) {
-    if (window.TaxiYouTubeMedia) window.TaxiYouTubeMedia.postMessage(JSON.stringify(value));
+    if (window.TaxiYouTubeMedia) window.TaxiYouTubeMedia.postMessage(
+      JSON.stringify(Object.assign({}, value, {token: bridgeToken})));
   }
   function video() { return document.querySelector('video'); }
   function publish() {
@@ -84,8 +87,13 @@
       desiredPlaying = !v.paused && !v.ended;
       v.addEventListener('playing', function () { desiredPlaying = true; });
       v.addEventListener('ended', function () { desiredPlaying = false; });
+      v.addEventListener('error', function () {
+        send({error: 'Trình phát YouTube gặp lỗi media (mã ' +
+          (v.error ? v.error.code : '?') + '). Thử tải lại hoặc tắt bộ lọc.'});
+      });
       v.addEventListener('pause', function () {
         if (document.hidden && backgroundAudio && desiredPlaying &&
+            backgroundSince > 0 && Date.now() - backgroundSince < 750 &&
             !v.ended && !backgroundResumeAttempted) {
           // Resume only an already-playing public video, once per background
           // transition. Do not poll, spoof visibility, or start new content.
@@ -107,6 +115,10 @@
     if (pendingPlay > 0) {
       pendingPlay--;
       attemptPlay();
+      if (pendingPlay === 0 && !v) {
+        desiredPlaying = false;
+        send({error: 'Chưa tìm thấy trình phát trên trang. Chọn video rồi bấm Phát hoặc tải lại.'});
+      }
     }
     publish();
   }
@@ -137,8 +149,9 @@
     publish: publish
   };
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) backgroundResumeAttempted = false;
+    backgroundSince = document.hidden ? Date.now() : 0;
+    backgroundResumeAttempted = false;
   });
   window.setInterval(tick, 1500);
   tick();
-}());
+}(__TAXI_BRIDGE_TOKEN__));

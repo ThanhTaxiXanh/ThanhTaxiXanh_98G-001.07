@@ -94,8 +94,8 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen> {
             'Phát nền giữ phiên nghe khi quay về trang chính, chuyển ứng dụng hoặc khóa màn hình. '
             'Điều khiển phát/tạm dừng/dừng ở thông báo, màn hình khóa hoặc Android Auto. '
             'YouTube có thể giới hạn phát nền của video/tài khoản; PiP giữ video hiển thị.\n\n'
-            'Android Auto nhận phiên âm thanh và danh sách video gần đây. '
-            'Android Auto không nhận cửa sổ PiP Android hoặc video WebView qua dịch vụ media.\n\n'
+            'Trên màn hình khách, mở mục Bản đồ rồi bấm YouTube để chuyển video sang đó. '
+            'Bấm lại YouTube để thu nhỏ/phóng to; Home về bảng tổng quan. Mục Nhạc chỉ điều khiển âm thanh.\n\n'
             'Bộ lọc quảng cáo đang thử nghiệm. Tắt bộ lọc nếu video không phát. '
             'Cần Internet; Google có thể từ chối đăng nhập trong WebView.',
           ),
@@ -130,6 +130,20 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 actions: [
+                  IconButton(
+                    key: const Key('youtube-play'),
+                    tooltip: state.media?.playing == true
+                        ? 'Tạm dừng video'
+                        : 'Phát video',
+                    onPressed: state.media?.playing == true
+                        ? _session.pause
+                        : _session.play,
+                    icon: Icon(
+                      state.media?.playing == true
+                          ? Icons.pause
+                          : Icons.play_arrow,
+                    ),
+                  ),
                   IconButton(
                     key: const Key('youtube-pip'),
                     tooltip: 'Hình trong hình (PiP)',
@@ -248,9 +262,24 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen> {
                     flex: 4,
                     child: Offstage(
                       offstage: state.fullscreen != null,
-                      child:
-                          _session.browser?.buildView(context) ??
-                          const Center(child: Text('Đang mở YouTube…')),
+                      child: state.carVideo
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'Video đang chuyển sang màn hình khách.\nBạn vẫn có thể tìm video tại đây.',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _session.showOnCar(false),
+                                    child: const Text('Chuyển về điện thoại'),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : _session.browser?.buildView(context) ??
+                                const Center(child: Text('Đang mở YouTube…')),
                     ),
                   ),
                 ],

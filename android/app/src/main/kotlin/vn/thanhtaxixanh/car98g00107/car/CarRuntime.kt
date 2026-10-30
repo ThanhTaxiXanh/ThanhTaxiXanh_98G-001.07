@@ -2,12 +2,19 @@ package vn.thanhtaxixanh.car98g00107.car
 
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.webkit.WebView
+import io.flutter.plugins.webviewflutter.WebViewFlutterAndroidExternalApi
 
 /** Shared with the audio_service engine, including car-first/cold launches. */
 object CarRuntime {
     private var channel: MethodChannel? = null
     private var engine: FlutterEngine? = null
     private var ready = false
+    var detachVideo: (() -> Unit)? = null
+    var videoEnabled = false
+        private set
+    @Suppress("DEPRECATION")
+    fun webView(id: Long): WebView? = engine?.let { WebViewFlutterAndroidExternalApi.getWebView(it, id) }
     private val listeners = linkedSetOf<(Map<String, Any?>) -> Unit>()
     var snapshot: Map<String, Any?> = emptyMap()
         private set
@@ -19,6 +26,8 @@ object CarRuntime {
         channel = MethodChannel(value.dartExecutor.binaryMessenger, "vn.thanhtaxixanh/car")
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "prepareCarVideo" -> { videoEnabled = true; result.success(null) }
+                "releaseCarVideo" -> { videoEnabled = false; detachVideo?.invoke(); result.success(null) }
                 "ready" -> {
                     ready = true
                     result.success(null)
