@@ -74,9 +74,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('fullscreen-video')), findsOneWidget);
       expect(find.byKey(const Key('youtube-search')), findsNothing);
+      expect(browser.viewDisposals, 0);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('fullscreen-video')), findsNothing);
+      expect(browser.viewDisposals, 0);
       expect(find.text('YouTube • Khách'), findsOneWidget);
       await tester.tap(find.byKey(const Key('youtube-back')));
       await tester.pumpAndSettle();
@@ -86,6 +88,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Mở YouTube'), findsOneWidget);
       expect(browser.closed, isTrue);
+      expect(browser.viewDisposals, 1);
     },
   );
 
@@ -152,10 +155,9 @@ class _Browser implements YouTubeBrowser {
   final YouTubeBrowserCallbacks callbacks;
   final locations = <Uri>[];
   bool filtering = true, closed = false;
-  int backCalls = 0, pauses = 0, reloads = 0;
+  int backCalls = 0, pauses = 0, reloads = 0, viewDisposals = 0;
   @override
-  Widget buildView(BuildContext context) =>
-      const ColoredBox(key: Key('browser-test-surface'), color: Colors.white);
+  Widget buildView(BuildContext context) => _BrowserSurface(this);
   @override
   Future<void> initialize(Uri location) => load(location);
   @override
@@ -185,4 +187,23 @@ class _Browser implements YouTubeBrowser {
   void exitFullscreen() => callbacks.onFullscreen(null);
   @override
   void close() => closed = true;
+}
+
+class _BrowserSurface extends StatefulWidget {
+  const _BrowserSurface(this.browser);
+  final _Browser browser;
+  @override
+  State<_BrowserSurface> createState() => _BrowserSurfaceState();
+}
+
+class _BrowserSurfaceState extends State<_BrowserSurface> {
+  @override
+  void dispose() {
+    widget.browser.viewDisposals++;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const ColoredBox(key: Key('browser-test-surface'), color: Colors.white);
 }

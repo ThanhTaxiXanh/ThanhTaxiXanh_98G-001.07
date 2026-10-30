@@ -253,7 +253,7 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen>
                     icon: Icon(
                       settings?.filterAds == true
                           ? Icons.shield_outlined
-                          : Icons.shield,
+                          : Icons.gpp_bad_outlined,
                     ),
                   ),
                   IconButton(
@@ -263,29 +263,14 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen>
                   ),
                 ],
               ),
-        body: fullscreen != null
-            ? ColoredBox(
-                color: Colors.black,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    fullscreen,
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: SafeArea(
-                        child: IconButton.filledTonal(
-                          key: const Key('youtube-exit-fullscreen'),
-                          tooltip: 'Thoát toàn màn hình',
-                          onPressed: () => _browser?.exitFullscreen(),
-                          icon: const Icon(Icons.fullscreen_exit),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : SafeArea(
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Keep the native WebView mounted while its fullscreen video custom
+            // view is shown, so switching modes cannot destroy the session.
+            Offstage(
+              offstage: fullscreen != null,
+              child: SafeArea(
                 child: Column(
                   children: [
                     Padding(
@@ -356,6 +341,33 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen>
                   ],
                 ),
               ),
+            ),
+            if (fullscreen != null)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Colors.black,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      fullscreen,
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: SafeArea(
+                          child: IconButton.filledTonal(
+                            key: const Key('youtube-exit-fullscreen'),
+                            tooltip: 'Thoát toàn màn hình',
+                            onPressed: () => _browser?.exitFullscreen(),
+                            icon: const Icon(Icons.fullscreen_exit),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
