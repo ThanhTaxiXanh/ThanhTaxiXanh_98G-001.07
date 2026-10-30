@@ -7,9 +7,11 @@ import 'youtube_session.dart';
 
 /// Publishes actual browser playback to Android's MediaSession/MediaBrowser.
 class TaxiAudioHandler extends BaseAudioHandler {
-  TaxiAudioHandler(this.session);
+  TaxiAudioHandler(this.session, {this._activateFocus});
   final YouTubeSession session;
+  final Future<bool> Function()? _activateFocus;
   AudioSession? _focus;
+  Future<bool>? _focusRequest;
   final _subscriptions = <StreamSubscription<dynamic>>[];
   List<YouTubeMedia> _recent = [];
   DateTime? _lastPositionUpdate;
@@ -30,13 +32,28 @@ class TaxiAudioHandler extends BaseAudioHandler {
     );
   }
 
-  Future<bool> requestFocus() async {
-    if (_focus == null) return true;
-    final allowed = await _focus!.setActive(true);
+  Future<bool> requestFocus() => _focusRequest ??= _requestFocus().whenComplete(
+    () => _focusRequest = null,
+  );
+
+  Future<bool> _requestFocus() async {
+    var allowed = false;
+    try {
+      allowed =
+          await (_activateFocus?.call() ??
+              _focus?.setActive(true) ??
+              Future.value(true));
+    } catch (_) {
+      // A missing/failed platform focus request must not allow playback.
+    }
     if (!allowed) {
       session.showError('Thiết bị chưa cấp quyền phát âm thanh lúc này.');
     }
     return allowed;
+  }
+
+  Future<void> _focusForBrowserPlayback() async {
+    if (!await requestFocus()) await pause();
   }
 
   MediaItem _item(YouTubeMedia media) => MediaItem(
@@ -80,6 +97,10 @@ class TaxiAudioHandler extends BaseAudioHandler {
   }
 
   void acceptMedia(YouTubeMedia media) {
+    // Playback can start inside the web page without a MediaSession command.
+    if (media.playing && !media.ended && !playbackState.value.playing) {
+      unawaited(_focusForBrowserPlayback());
+    }
     final previous = mediaItem.value;
     if (previous?.id != 'youtube:${media.id}' ||
         previous?.title != media.title ||

@@ -48,6 +48,8 @@ jobs:
         run: node --test scripts/*.test.mjs
       - name: Generate cross-platform QR fixture
         run: dart run tool/generate_car_qr_fixture.dart
+      - name: Configure Android build
+        run: flutter build apk --debug --config-only --no-pub --target-platform android-arm64
       - name: Test native car templates and QR rendering
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest --no-daemon

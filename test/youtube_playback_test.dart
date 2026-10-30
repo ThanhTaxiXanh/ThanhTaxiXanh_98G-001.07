@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/widgets.dart';
@@ -130,6 +131,37 @@ void main() {
       expect(
         handler.playbackState.value.processingState,
         AudioProcessingState.idle,
+      );
+    },
+  );
+
+  test(
+    'starting playback in the web page requests focus and pauses on denial',
+    () async {
+      final session = container.read(youTubeSessionProvider.notifier);
+      final focus = Completer<bool>();
+      var requests = 0;
+      final handler = TaxiAudioHandler(
+        session,
+        activateFocus: () {
+          requests++;
+          return focus.future;
+        },
+      );
+      session.attachHandler(handler);
+      await session.ensureInitialized();
+      browser.report(video('abcdefghijk'));
+      browser.report(video('abcdefghijk'));
+      expect(requests, 1);
+      expect(handler.playbackState.value.playing, isTrue);
+      focus.complete(false);
+      await Future<void>.delayed(Duration.zero);
+      expect(browser.pauses, greaterThan(0));
+      expect(handler.playbackState.value.playing, isFalse);
+      expect(container.read(youTubeSessionProvider).media?.playing, isFalse);
+      expect(
+        container.read(youTubeSessionProvider).message,
+        contains('quyền phát âm thanh'),
       );
     },
   );
