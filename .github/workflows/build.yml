@@ -37,6 +37,11 @@ jobs:
         run: flutter analyze
       - name: Test
         run: flutter test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test YouTube DOM filter
+        run: node --test scripts/youtube_filter.test.mjs
       - name: Build release APKs for testing
         run: flutter build apk --release --split-per-abi
       - name: Upload APKs

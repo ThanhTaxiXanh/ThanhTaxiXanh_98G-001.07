@@ -5,6 +5,7 @@ import '../../calendar/presentation/calendar_providers.dart';
 import '../../calendar/presentation/upcoming_events_card.dart';
 import '../../payment/presentation/payment_screen.dart';
 import '../../map/presentation/driving_map.dart';
+import '../../media/presentation/youtube_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -12,7 +13,19 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Thanh Taxi Xanh')),
+      appBar: AppBar(
+        title: const Text('Thanh Taxi Xanh'),
+        actions: [
+          IconButton(
+            key: const Key('open-youtube'),
+            tooltip: 'YouTube dành cho khách',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const YouTubeScreen()),
+            ),
+            icon: const Icon(Icons.smart_display_outlined),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {

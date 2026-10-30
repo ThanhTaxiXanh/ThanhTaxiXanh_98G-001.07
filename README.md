@@ -13,7 +13,10 @@ The payment screen selects saved recipients and asks only for amount and note in
 daily use. Recipients, default selection, default note and optional footer/center
 logos are stored in the app's SQLite database. A searchable bank picker replaces
 manual bank-name/BIN entry. A MapLibre 3D map, foreground GPS, address search and route preview are available.
-Media and Android Auto projection remain unimplemented.
+A passenger YouTube browser with an experimental DOM ad filter is available in
+the regular Android app. Background audio and Android Auto projection remain
+unimplemented. YouTube video while moving on a projected passenger screen is a
+required, **unresolved** feature; the browser does not fulfill that requirement.
 
 ## Development
 
@@ -24,6 +27,7 @@ flutter pub get --enforce-lockfile
 dart format --output=none --set-exit-if-changed lib test
 flutter analyze
 flutter test
+node --test scripts/youtube_filter.test.mjs
 flutter run
 flutter build apk --release --split-per-abi
 ```
@@ -216,5 +220,50 @@ provide that rendering path without an access token; building detail follows the
 available vector data and is not a photorealistic building model.
 
 Media needs an audio handler, Android foreground service and lifecycle setup.
-Video playback needs parked-mode support from the host. YouTube integration needs
-supported player APIs and host capabilities; no ad-removal patches are included.
+
+## Passenger YouTube browser (experimental)
+
+The dashboard's YouTube action opens the public mobile YouTube website in a
+WebView. Search by words or paste an HTTPS YouTube link, return to the YouTube
+homepage, go back through browser history, retry failed loads, and use the
+website's fullscreen video control. Fullscreen back exits the video view first.
+Playback requires a user gesture. Going into the background pauses video/audio
+and suspends the filter; returning does not automatically start playback.
+
+The shield action toggles the experimental ad filter. Its JavaScript hides known
+promoted-card/overlay elements and attempts to skip a playing video only when
+YouTube positively marks the player as showing an ad. Ordinary/paused videos and
+unknown/live durations are not sought. A previous mute state is restored when an
+ad ends or the filter is disabled. It does not remove creator sponsorships,
+patch the YouTube APK, extract streams or intercept network responses. YouTube's
+markup and ad delivery change: **ad-free playback is not guaranteed or verified
+on the actual website**, and filtering can break playback. Turn it off to
+diagnose a playback problem. This is not a completed 100% ad-free requirement.
+
+Preferences retain only the filter toggle and one sanitized public YouTube
+location, not a browsing history, account credentials or sign-in redirect
+parameters. Cookies stay in the platform WebView; the app does not read them.
+Google can refuse sign-in in embedded WebViews. Public videos need no account,
+and video availability still depends on YouTube, region and network access.
+Top-level navigation is limited to exact HTTPS YouTube/Google consent/sign-in
+hosts; arbitrary external sites and custom schemes are not opened. Web camera
+and microphone requests are denied. Certificate errors use the platform's
+default behavior.
+
+**Current target:** a passenger-only screen receiving Android Auto projection
+from a Xiaomi Redmi Note 12 Pro, Android 13, Android Auto 18.1.164344. This build
+does not declare a projected YouTube service or add Android Auto video support.
+The official parked-activity projection path requires Android 15+, and its
+documented generally supported category is games. Android Auto controls app
+availability and motion restrictions. A screen being physically installed for
+passengers does not provide a public API to override those host restrictions.
+Fermata uses a separate legacy projection SDK; adding the Flutter WebView or
+copying a manifest entry does not reproduce that integration. No root hooks,
+installer spoofing, category spoofing or host patches are included.
+
+See [YouTube compatibility and remaining acceptance checks](docs/youtube-compatibility.md).
+Flutter tests cover URL boundaries, settings persistence, ordered writes, browser
+control flow, fullscreen back, retry, lifecycle pause and responsive layouts.
+The native browser is replaced by a fake in widget tests; Node tests execute the
+actual filter script against simulated ad/non-ad player states. These checks do
+not validate live YouTube ads, the physical screen, or Android Auto projection.
