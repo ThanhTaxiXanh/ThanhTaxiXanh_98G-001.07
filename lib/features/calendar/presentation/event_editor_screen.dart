@@ -132,8 +132,9 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
       _error = null;
     });
     try {
-      await (await ref.read(eventRepositoryProvider.future)).save(event);
-      ref.invalidate(eventsProvider);
+      final container = ProviderScope.containerOf(context, listen: false);
+      await (await container.read(eventRepositoryProvider.future)).save(event);
+      container.invalidate(eventsProvider);
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
       if (mounted) {

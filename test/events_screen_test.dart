@@ -1,8 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taxi_auto/features/calendar/domain/calendar_event.dart';
 
 import 'support/test_app.dart';
+
+class DeferredEvents extends MemoryEvents {
+  final gate = Completer<void>();
+  @override
+  Future<void> save(CalendarEvent event) async {
+    await gate.future;
+    await super.save(event);
+  }
+}
 
 void main() {
   testWidgets('events can be created, edited, seen on dashboard and deleted', (
@@ -77,4 +88,32 @@ void main() {
       expect(find.textContaining('Âm lịch 1/1'), findsOneWidget);
     },
   );
+  testWidgets('a completed save refreshes the list after leaving the editor', (
+    tester,
+  ) async {
+    final events = DeferredEvents();
+    await tester.pumpWidget(testApp(events: events));
+    await tester.pumpAndSettle();
+    final manage = find.byKey(const Key('manage-events'));
+    await tester.ensureVisible(manage);
+    await tester.tap(manage);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-event')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('event-title')),
+      'Lưu khi quay lại',
+    );
+    final save = find.byKey(const Key('save-event'));
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    events.gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Lưu khi quay lại'), findsOneWidget);
+    expect(events.records.length, 1);
+    expect(tester.takeException(), isNull);
+  });
 }

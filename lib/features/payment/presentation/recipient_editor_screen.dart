@@ -68,8 +68,9 @@ class _RecipientEditorScreenState extends ConsumerState<RecipientEditorScreen> {
   Future<void> _refreshBanks() async {
     setState(() => _refreshing = true);
     try {
-      await (await ref.read(bankRepositoryProvider.future)).refresh();
-      ref.invalidate(bankCatalogProvider);
+      final container = ProviderScope.containerOf(context, listen: false);
+      await (await container.read(bankRepositoryProvider.future)).refresh();
+      container.invalidate(bankCatalogProvider);
       _showError('Đã cập nhật danh sách ngân hàng để dùng offline.');
     } catch (_) {
       _showError(
@@ -132,7 +133,11 @@ class _RecipientEditorScreenState extends ConsumerState<RecipientEditorScreen> {
         footerLogo: _footerLogo,
         centerLogo: _centerLogo,
       );
-      await (await ref.read(recipientRepositoryProvider.future)).save(account);
+      final container = ProviderScope.containerOf(context, listen: false);
+      await (await container.read(
+        recipientRepositoryProvider.future,
+      )).save(account);
+      container.invalidate(recipientsProvider);
       if (mounted) Navigator.of(context).pop(account.id);
     } on DuplicateRecipientException {
       if (mounted) {

@@ -9,11 +9,7 @@ import 'event_providers.dart';
 class EventsScreen extends ConsumerWidget {
   const EventsScreen({super.key});
 
-  Future<void> _delete(
-    BuildContext context,
-    WidgetRef ref,
-    CalendarEvent event,
-  ) async {
+  Future<void> _delete(BuildContext context, CalendarEvent event) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -31,10 +27,13 @@ class EventsScreen extends ConsumerWidget {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !context.mounted) return;
     try {
-      await (await ref.read(eventRepositoryProvider.future)).delete(event.id);
-      ref.invalidate(eventsProvider);
+      final container = ProviderScope.containerOf(context, listen: false);
+      await (await container.read(
+        eventRepositoryProvider.future,
+      )).delete(event.id);
+      container.invalidate(eventsProvider);
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -124,7 +123,7 @@ class EventsScreen extends ConsumerWidget {
                             ),
                           );
                         } else {
-                          _delete(context, ref, event);
+                          _delete(context, event);
                         }
                       },
                       itemBuilder: (_) => const [

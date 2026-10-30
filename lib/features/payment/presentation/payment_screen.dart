@@ -95,8 +95,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   ) async {
     setState(() => _busy = true);
     try {
-      await action(await ref.read(recipientRepositoryProvider.future));
-      ref.invalidate(recipientsProvider);
+      final container = ProviderScope.containerOf(context, listen: false);
+      await action(await container.read(recipientRepositoryProvider.future));
+      container.invalidate(recipientsProvider);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
