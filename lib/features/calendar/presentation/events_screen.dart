@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/calendar_event.dart';
 import 'calendar_providers.dart';
 import 'event_editor_screen.dart';
+import 'event_countdown.dart';
 import 'event_providers.dart';
 
 class EventsScreen extends ConsumerWidget {
@@ -97,14 +98,31 @@ class EventsScreen extends ConsumerWidget {
               itemBuilder: (context, i) {
                 final event = sorted[i];
                 final next = event.nextOnOrAfter(today, lunar);
+                final occurrence = next == null
+                    ? null
+                    : EventOccurrence(event, next);
                 return Card(
                   child: ListTile(
                     contentPadding: const EdgeInsets.all(16),
-                    title: Text(event.title),
-                    subtitle: Text(
-                      '${event.dateLabel}\n'
-                      '${next == null ? (event.yearly ? "Không còn lần lặp trong khoảng lịch hỗ trợ" : "Đã qua") : "Lần tới: ${next.day}/${next.month}/${next.year}"}'
-                      '${event.notes.isEmpty ? "" : "\n${event.notes}"}',
+                    title: Text(occurrence?.title(lunar) ?? event.title),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(event.dateLabel),
+                        if (occurrence != null)
+                          EventCountdown(
+                            occurrence: occurrence,
+                            today: today,
+                            calendar: lunar,
+                          )
+                        else
+                          Text(
+                            event.yearly || event.monthly
+                                ? 'Không còn lần lặp trong khoảng lịch hỗ trợ'
+                                : 'Đã qua',
+                          ),
+                        if (event.notes.isNotEmpty) Text(event.notes),
+                      ],
                     ),
                     isThreeLine: true,
                     onTap: () => Navigator.of(context).push(

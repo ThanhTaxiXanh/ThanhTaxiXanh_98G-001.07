@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'calendar_providers.dart';
+import 'event_countdown.dart';
 import 'event_providers.dart';
 import 'events_screen.dart';
 
@@ -10,6 +12,7 @@ class UpcomingEventsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final today = ref.watch(vietnamTodayProvider);
+    final calendar = ref.watch(lunarCalendarProvider);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -47,14 +50,15 @@ class UpcomingEventsCard extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  occurrence.event.title,
+                                  occurrence.title(calendar),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                Text(
-                                  '${occurrence.date == today ? "Hôm nay" : "${occurrence.date.day}/${occurrence.date.month}/${occurrence.date.year}"}'
-                                  ' · ${occurrence.event.dateLabel}',
+                                EventCountdown(
+                                  occurrence: occurrence,
+                                  today: today,
+                                  calendar: calendar,
                                 ),
                               ],
                             ),

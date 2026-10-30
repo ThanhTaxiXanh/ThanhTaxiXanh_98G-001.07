@@ -10,6 +10,7 @@ import 'package:taxi_auto/core/storage/app_database.dart';
 import 'package:taxi_auto/features/calendar/data/sqlite_event_repository.dart';
 import 'package:taxi_auto/features/calendar/domain/calendar_event.dart';
 import 'package:taxi_auto/features/calendar/domain/lunar_calendar.dart';
+import 'package:taxi_auto/features/calendar/domain/default_events.dart';
 import 'package:taxi_auto/features/payment/data/sqlite_bank_repository.dart';
 import 'package:taxi_auto/features/payment/data/sqlite_recipient_repository.dart';
 import 'package:taxi_auto/features/payment/domain/recipient_account.dart';
@@ -179,6 +180,9 @@ void main() {
     'event create, edit, reload and delete preserve calendar semantics',
     () async {
       var repo = SqliteEventRepository(db, LunarCalendar());
+      for (final preset in await repo.list()) {
+        await repo.delete(preset.id);
+      }
       const initial = CalendarEvent(
         id: 'event',
         title: 'Giỗ',
@@ -226,6 +230,91 @@ void main() {
       expect((await repo.list()).length, 1);
       await repo.delete('event');
       expect(await repo.list(), isEmpty);
+    },
+  );
+  test(
+    'default events are seeded once and edited/deleted defaults stay changed',
+    () async {
+      var repo = SqliteEventRepository(db, LunarCalendar());
+      final events = await repo.list();
+      expect(events.length, defaultCalendarEvents.length);
+      expect(events.where((e) => e.monthly).length, 2);
+      final deleted = defaultCalendarEvents.first.id;
+      await repo.delete(deleted);
+      final edited = defaultCalendarEvents.last;
+      await repo.save(
+        CalendarEvent(
+          id: edited.id,
+          title: 'Tên riêng',
+          day: edited.day,
+          month: edited.month,
+          year: edited.year,
+          calendar: edited.calendar,
+          yearly: true,
+        ),
+      );
+      await reopen();
+      repo = SqliteEventRepository(db, LunarCalendar());
+      final restored = await repo.list();
+      expect(restored.length, defaultCalendarEvents.length - 1);
+      expect(restored.where((e) => e.id == deleted), isEmpty);
+      expect(restored.firstWhere((e) => e.id == edited.id).title, 'Tên riêng');
+    },
+  );
+
+  test(
+    'schema v1 upgrade retains recipients and personal events while adding defaults',
+    () async {
+      await db.close();
+      await databaseFactoryFfi.deleteDatabase(location);
+      db = await databaseFactoryFfi.openDatabase(
+        location,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (db, _) async {
+            await db.execute(
+              'CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+            );
+            await db.execute(
+              'CREATE TABLE events (id TEXT PRIMARY KEY, title TEXT NOT NULL, '
+              'notes TEXT NOT NULL, calendar TEXT NOT NULL, day INTEGER NOT NULL, '
+              'month INTEGER NOT NULL, year INTEGER NOT NULL, is_leap INTEGER NOT NULL, is_yearly INTEGER NOT NULL)',
+            );
+            await db.execute(
+              'CREATE TABLE recipients (id TEXT PRIMARY KEY, bank_bin TEXT NOT NULL, '
+              'bank_name TEXT NOT NULL, account_number TEXT NOT NULL, account_holder TEXT NOT NULL, '
+              'default_note TEXT NOT NULL, is_default INTEGER NOT NULL, footer_logo BLOB, center_logo BLOB)',
+            );
+            await db.insert('events', {
+              'id': 'personal',
+              'title': 'Sự kiện cũ',
+              'notes': '',
+              'calendar': 'solar',
+              'day': 9,
+              'month': 11,
+              'year': 2026,
+              'is_leap': 0,
+              'is_yearly': 0,
+            });
+            await db.insert('recipients', {
+              'id': 'old',
+              'bank_bin': '970422',
+              'bank_name': 'MBBank',
+              'account_number': '001234',
+              'account_holder': 'TEST',
+              'default_note': '',
+              'is_default': 1,
+            });
+          },
+        ),
+      );
+      await reopen();
+      final events = await SqliteEventRepository(db, LunarCalendar()).list();
+      expect(events.firstWhere((e) => e.id == 'personal').title, 'Sự kiện cũ');
+      expect(events.length, defaultCalendarEvents.length + 1);
+      final account = (await SqliteRecipientRepository(db).list()).single;
+      expect(account.accountNumber, '001234');
+      expect(account.isDefault, isTrue);
     },
   );
 }

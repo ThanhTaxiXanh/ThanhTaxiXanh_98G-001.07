@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taxi_auto/features/calendar/domain/calendar_event.dart';
+import 'package:taxi_auto/features/calendar/domain/default_events.dart';
 
 import 'support/test_app.dart';
 
@@ -85,7 +86,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Tết gia đình'), findsOneWidget);
       expect(find.textContaining('Hôm nay'), findsOneWidget);
-      expect(find.textContaining('Âm lịch 1/1'), findsOneWidget);
+      expect(find.textContaining('1/1 (Âm lịch)'), findsOneWidget);
     },
   );
   testWidgets('a completed save refreshes the list after leaving the editor', (
@@ -115,5 +116,20 @@ void main() {
     expect(find.text('Lưu khi quay lại'), findsOneWidget);
     expect(events.records.length, 1);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('monthly default shows countdown and both calendar dates', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        events: MemoryEvents([defaultCalendarEvents.first]),
+        instant: DateTime.utc(2026, 10, 28, 17),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Ngày mùng 1 tháng 10'), findsOneWidget);
+    expect(find.text('Còn 11 ngày'), findsOneWidget);
+    expect(find.text('09/11/2026'), findsOneWidget);
+    expect(find.text('1/10 (Âm lịch)'), findsOneWidget);
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taxi_auto/features/calendar/domain/calendar_event.dart';
 import 'package:taxi_auto/features/calendar/domain/lunar_calendar.dart';
+import 'package:taxi_auto/features/calendar/domain/default_events.dart';
 
 void main() {
   final lunar = LunarCalendar();
@@ -121,4 +122,56 @@ void main() {
       expect(() => event.validate(lunar), throwsArgumentError);
     }
   });
+  test(
+    'countdown shows the supplied lunar-month example and civil-day boundaries',
+    () {
+      final event = defaultCalendarEvents.first;
+      final today = DateTime.utc(2026, 10, 29);
+      final occurrence = EventOccurrence(
+        event,
+        event.nextOnOrAfter(today, lunar)!,
+      );
+      expect(occurrence.title(lunar), 'Ngày mùng 1 tháng 10');
+      expect(occurrence.countdown(today), 'Còn 11 ngày');
+      expect(occurrence.solarLabel, '09/11/2026');
+      expect(occurrence.lunarLabel(lunar), '1/10 (Âm lịch)');
+      expect(
+        occurrence.countdown(DateTime.utc(2026, 11, 9, 23, 59)),
+        'Hôm nay',
+      );
+      final newYear = EventOccurrence(event, DateTime.utc(2027));
+      expect(newYear.countdown(DateTime.utc(2026, 12, 31)), 'Còn 1 ngày');
+    },
+  );
+
+  test(
+    'monthly lunar events include leap months and advance after their day',
+    () {
+      final first = defaultCalendarEvents.first;
+      expect(
+        first.nextOnOrAfter(DateTime.utc(2023, 3, 22), lunar),
+        DateTime.utc(2023, 3, 22),
+      );
+      expect(
+        first.nextOnOrAfter(DateTime.utc(2023, 3, 23), lunar),
+        DateTime.utc(2023, 4, 20),
+      );
+      const solar = CalendarEvent(
+        id: 'monthly',
+        title: 'Cuối tháng',
+        day: 31,
+        month: 1,
+        year: 2026,
+        monthly: true,
+      );
+      solar.validate(lunar);
+      expect(
+        solar.nextOnOrAfter(DateTime.utc(2026, 2), lunar),
+        DateTime.utc(2026, 3, 31),
+      );
+      for (final event in defaultCalendarEvents) {
+        event.validate(lunar);
+      }
+    },
+  );
 }

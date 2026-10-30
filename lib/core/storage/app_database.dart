@@ -12,7 +12,14 @@ Future<Database> openAppDatabase({
   return selectedFactory.openDatabase(
     location,
     options: OpenDatabaseOptions(
-      version: 1,
+      version: 2,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE events ADD COLUMN is_monthly INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+      },
       onCreate: (db, _) async {
         await db.execute('''CREATE TABLE banks (
         bin TEXT PRIMARY KEY, name TEXT NOT NULL,
@@ -35,7 +42,8 @@ Future<Database> openAppDatabase({
         id TEXT PRIMARY KEY, title TEXT NOT NULL, notes TEXT NOT NULL,
         calendar TEXT NOT NULL, day INTEGER NOT NULL,
         month INTEGER NOT NULL, year INTEGER NOT NULL,
-        is_leap INTEGER NOT NULL, is_yearly INTEGER NOT NULL
+        is_leap INTEGER NOT NULL, is_yearly INTEGER NOT NULL,
+        is_monthly INTEGER NOT NULL DEFAULT 0
       )''');
       },
     ),

@@ -24,6 +24,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   late EventCalendar _calendar;
   bool _leap = false;
   bool _yearly = false;
+  bool _monthly = false;
   bool _saving = false;
   String? _error;
 
@@ -40,6 +41,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
     _calendar = event?.calendar ?? EventCalendar.solar;
     _leap = event?.leap ?? false;
     _yearly = event?.yearly ?? false;
+    _monthly = event?.monthly ?? false;
   }
 
   @override
@@ -117,6 +119,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
       calendar: _calendar,
       leap: _leap,
       yearly: _yearly,
+      monthly: _monthly,
     );
     try {
       event.validate(ref.read(lunarCalendarProvider));
@@ -260,7 +263,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
                         title: const Text('Tháng nhuận'),
                         contentPadding: EdgeInsets.zero,
                         value: _leap,
-                        onChanged: _saving
+                        onChanged: _saving || _monthly
                             ? null
                             : (v) => setState(() => _leap = v!),
                       ),
@@ -270,15 +273,44 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
                             : 'Dương lịch: ${date.day}/${date.month}/${date.year}',
                       ),
                     ],
-                    SwitchListTile(
-                      key: const Key('event-yearly'),
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Lặp hằng năm'),
-                      value: _yearly,
+                    DropdownButtonFormField<String>(
+                      key: const Key('event-repeat'),
+                      initialValue: _monthly
+                          ? 'monthly'
+                          : _yearly
+                          ? 'yearly'
+                          : 'none',
+                      decoration: const InputDecoration(labelText: 'Lặp lại'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'none',
+                          child: Text('Không lặp'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'monthly',
+                          child: Text('Hằng tháng'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'yearly',
+                          child: Text('Hằng năm'),
+                        ),
+                      ],
                       onChanged: _saving
                           ? null
-                          : (v) => setState(() => _yearly = v),
+                          : (value) => setState(() {
+                              _monthly = value == 'monthly';
+                              _yearly = value == 'yearly';
+                              if (_monthly) _leap = false;
+                            }),
                     ),
+                    if (_monthly)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          'Lặp theo ngày đã chọn trong mỗi tháng, kể cả tháng âm nhuận. '
+                          'Tháng không có ngày đó được bỏ qua.',
+                        ),
+                      ),
                     if (_yearly)
                       const Padding(
                         padding: EdgeInsets.only(bottom: 16),
