@@ -25,6 +25,7 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
   final _bridge = YouTubeBridgeCodec();
   int _document = 0;
   bool _playOnReady = false;
+  int _transportRequest = 0;
   Uri? _mainLocation;
   OnHideCustomWidgetCallback? _hideFullscreen;
   @override
@@ -217,15 +218,39 @@ class WebViewYouTubeBrowser implements YouTubeBrowser {
   }
 
   @override
-  Future<void> pause() => _controller.runJavaScript(
-    'if(window.taxiYouTubeMedia) window.taxiYouTubeMedia.pause();'
-    "document.querySelectorAll('video,audio').forEach(function(v){v.pause();});",
-  );
+  Future<void> pause() {
+    _transportRequest++;
+    _playOnReady = false;
+    return _controller.runJavaScript(
+      'if(window.taxiYouTubeMedia) window.taxiYouTubeMedia.pause();'
+      "document.querySelectorAll('video,audio').forEach(function(v){v.pause();});",
+    );
+  }
 
   @override
-  Future<void> play() => _controller.runJavaScript(
-    'if(window.taxiYouTubeMedia) window.taxiYouTubeMedia.play();',
-  );
+  Future<void> play() async {
+    final request = ++_transportRequest;
+    final document = _document;
+    final current = Uri.tryParse(await _controller.currentUrl() ?? '');
+    if (_closed || request != _transportRequest) return;
+    if (document == 0 ||
+        current == null ||
+        !YouTubeLocation.isContent(current)) {
+      _playOnReady = true;
+      return;
+    }
+    final script = await _mediaScript;
+    if (_closed || request != _transportRequest) return;
+    if (document != _document) {
+      _playOnReady = true;
+      return;
+    }
+    // The user may press Play before onPageFinished installs the bridge.
+    await _controller.runJavaScript(_bridge.inject(script));
+    if (_closed || request != _transportRequest) return;
+    await _controller.runJavaScript('window.taxiYouTubeMedia.play();');
+  }
+
   @override
   Future<void> seek(Duration position) {
     final seconds = position.inMilliseconds / 1000;

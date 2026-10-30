@@ -61,6 +61,7 @@ class FakeYouTubeBrowser implements YouTubeBrowser {
   int? get androidViewIdentifier => viewIdentifier;
   FakeYouTubeBrowser(this.callbacks);
   final YouTubeBrowserCallbacks callbacks;
+  Completer<void>? initializationGate;
   final locations = <Uri>[];
   final compacts = <bool>[];
   int plays = 0, pauses = 0, reloads = 0;
@@ -70,7 +71,11 @@ class FakeYouTubeBrowser implements YouTubeBrowser {
   Widget buildView(BuildContext context) =>
       const SizedBox.expand(key: Key('fake-youtube'));
   @override
-  Future<void> initialize(Uri location) => load(location);
+  Future<void> initialize(Uri location) async {
+    await initializationGate?.future;
+    await load(location);
+  }
+
   @override
   Future<void> load(Uri location) async {
     locations.add(location);

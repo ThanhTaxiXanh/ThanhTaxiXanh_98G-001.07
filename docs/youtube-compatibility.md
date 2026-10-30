@@ -47,7 +47,7 @@ tương tác hay chính sách của bộ nhận thực. Chế độ màn hình k
 chưa có chứng nhận Play/Android Auto. Cửa sổ thu nhỏ này nằm trong ứng dụng;
 Android PiP hệ thống là tính năng riêng của điện thoại.
 
-67 Flutter/12 JS/7 Android tests và Chromium HTML5 fixture đã qua; YouTube thật
+70 Flutter/13 JS/7 Android tests và Chromium HTML5 fixture đã qua; YouTube thật
 trên Redmi/bộ nhận vẫn cần thử. [Báo cáo đầy đủ](source-security-review.md) nêu rõ
 lỗi đã sửa, phạm vi bảo mật và phần Master Prompt còn chưa hoàn chỉnh.
 

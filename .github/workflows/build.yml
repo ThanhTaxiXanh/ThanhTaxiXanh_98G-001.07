@@ -43,11 +43,10 @@ jobs:
         run: flutter analyze
       - name: Test
         run: flutter test
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22'
       - name: Test YouTube DOM filter
-        run: node --test scripts/*.test.mjs
+        run: |
+          node --version
+          node --test scripts/*.test.mjs
       - name: Generate cross-platform QR fixture
         run: dart run tool/generate_car_qr_fixture.dart
       - name: Configure Android build

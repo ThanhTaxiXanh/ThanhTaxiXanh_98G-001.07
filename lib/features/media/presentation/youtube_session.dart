@@ -86,6 +86,8 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   StreamSubscription<bool>? _pipSubscription;
   Timer? _remember;
   Timer? _carAttachTimeout;
+  int _carRequest = 0;
+  int _playRequest = 0;
   bool _visible = false, _pendingPlay = false;
   int _historyGeneration = 0;
   String? _lastRememberedVideo;
@@ -141,6 +143,7 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   }
 
   Future<void> ensureInitialized() {
+    if (_initializing != null) return _initializing!;
     if (_browser != null && state.initialized) return Future.value();
     return _initializing ??= _initialize().whenComplete(
       () => _initializing = null,
@@ -271,11 +274,14 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   }
 
   Future<void> load(Uri uri, {bool playAfterLoad = false}) async {
+    final request = ++_playRequest;
     clearError();
     await ensureInitialized();
+    if (!ref.mounted || request != _playRequest) return;
     _pendingPlay = playAfterLoad;
     try {
       await _browser?.pause().catchError((Object _) {});
+      if (!ref.mounted || request != _playRequest) return;
       await _browser?.load(uri);
     } catch (_) {
       showError('Chưa mở được trang YouTube.');
@@ -292,7 +298,9 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   }
 
   Future<void> play() async {
+    final request = ++_playRequest;
     await ensureInitialized();
+    if (!ref.mounted || request != _playRequest) return;
     try {
       await _browser?.play();
     } catch (_) {
@@ -301,8 +309,10 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   }
 
   Future<void> pause() async {
+    final request = ++_playRequest;
     _pendingPlay = false;
     await _browser?.pause().catchError((Object _) {});
+    if (!ref.mounted || request != _playRequest) return;
     if (ref.mounted && state.media != null) {
       state = state.copy(media: state.media!.paused());
     }
@@ -311,8 +321,9 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   }
 
   Future<void> stop() async {
+    final request = _playRequest + 1;
     await pause();
-    _handler?.markStopped();
+    if (request == _playRequest) _handler?.markStopped();
   }
 
   Future<void> seek(Duration position) async {
@@ -398,6 +409,7 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
   }
 
   Future<void> showOnCar(bool enabled) async {
+    final request = ++_carRequest;
     _carAttachTimeout?.cancel();
     if (!enabled) {
       try {
@@ -410,7 +422,7 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
         showError('Chưa chuyển được video về điện thoại. Thử lại.');
         return;
       }
-      if (!ref.mounted) return;
+      if (!ref.mounted || request != _carRequest) return;
       state = state.copy(carVideo: false, carPip: false, clearCarView: true);
       await _browser?.setCompact(state.inPip).catchError((Object _) {});
       unawaited(_configurePip());
@@ -418,7 +430,7 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
     }
     await ensureInitialized();
     final id = _browser?.androidViewIdentifier;
-    if (!ref.mounted) return;
+    if (!ref.mounted || request != _carRequest) return;
     if (id == null) {
       showError('Chưa kết nối được trình phát với màn hình khách.');
       return;
@@ -438,7 +450,7 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
     } on TimeoutException {
       /* No attached phone view. */
     }
-    if (!ref.mounted || !state.carVideo) return;
+    if (!ref.mounted || request != _carRequest || !state.carVideo) return;
     try {
       await const MethodChannel(
         'vn.thanhtaxixanh/car',
@@ -446,15 +458,16 @@ class YouTubeSession extends Notifier<YouTubeSessionState>
     } on MissingPluginException {
       /* Test engine. */
     } on PlatformException {
+      if (!ref.mounted || request != _carRequest) return;
       await showOnCar(false);
       showError('Chưa kết nối được trình phát với màn hình khách.');
       return;
     }
-    if (!ref.mounted || !state.carVideo) return;
+    if (!ref.mounted || request != _carRequest || !state.carVideo) return;
     state = state.copy(carViewId: id);
     unawaited(_configurePip());
     _carAttachTimeout = Timer(const Duration(seconds: 8), () {
-      if (ref.mounted && state.carVideo) {
+      if (ref.mounted && request == _carRequest && state.carVideo) {
         unawaited(showOnCar(false));
         showError(
           'Màn hình khách chưa nhận trình phát. Video đã chuyển về điện thoại.',

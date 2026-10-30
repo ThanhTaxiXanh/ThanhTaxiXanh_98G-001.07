@@ -15,6 +15,7 @@ Không xem đây là kiểm toán firmware, hệ điều hành hoặc mã mọi 
 | --- | --- | --- |
 | E1 | AudioSession và Chromium cùng xin audio focus. Xung đột được xác nhận từ mã; quan hệ với lỗi Play trên Redmi là suy luận chưa có log thiết bị. | Bỏ request trùng; app chỉ nghe tháo tai nghe. [initializeAudioEvents](../lib/features/media/presentation/youtube_audio_handler.dart#L17). |
 | E2 | Bộ lọc cũ tua media đến cuối và mute khi có trạng thái ad, có thể làm kẹt preroll. | Chỉ bấm Skip đang hiện, không tua/mute. [tick](../assets/scripts/youtube_filter.js#L23). Chromium HTML5 đã quan sát phát tiếp khi bật lọc. |
+| E10 | Khởi tạo đồng thời có thể trả về quá sớm; Play/chuyển màn hình cũ có thể chạy sau Pause/Home. | Chờ cùng future khởi tạo, mã yêu cầu để hủy lệnh cũ, cài JS bridge khi Play đến sớm. Ba kiểm thử hồi quy xác nhận khởi tạo/Play/Home. |
 | E3 | MapWithContentTemplate cũ để host sắp pane, không thực hiện ba hàng 60/40. | Dashboard sở hữu vùng app được cấp. [onMeasure](../android/app/src/main/kotlin/vn/thanhtaxixanh/car98g00107/car/CarDashboardLayout.kt#L140): đo 480/320 trong vùng rộng 800px; ba hàng có tỷ lệ lưu được. |
 | E4 | Kênh JS chỉ kiểm tra URL trang chính, iframe vẫn có thể gửi metadata giả. | Nonce riêng từng document, giới hạn 8KB, kiểm tra dữ liệu và không cài script trong iframe. [decode](../lib/features/media/data/youtube_bridge_codec.dart#L16). Chưa thấy đường thực thi lệnh tùy ý từ metadata. |
 | E5 | Giới hạn API bản đồ được kiểm tra sau tải cả body; ngân hàng chưa giới hạn body. | [boundedGet](../lib/core/network/bounded_http.dart#L6) giới hạn lúc stream, deadline/abort và hủy stream. Mức 4MB cho bản đồ, 512KB cho ngân hàng; giới hạn số bản ghi và độ dài trường. |
@@ -36,7 +37,7 @@ PEM cho kết quả 0 trong phạm vi nêu trên; không phát hiện được m
 | Phone YouTube | Screen → Session → WebView → JS | Host HTTPS cho phép; app-link YouTube đổi thành URL công khai, không theo intent fallback. |
 | Âm thanh | JS xác thực → Session → AudioHandler → audio_service | Trạng thái thật cho notification/media browser; lệnh quay về cùng WebView. |
 | Dashboard xe | CarBridge → CarRuntime → CarSurfaceMap → CarDashboardLayout | Lịch/QR/media cùng nguồn với phone; map và bố cục trong Surface host cấp. |
-| Chuyển video | [showOnCar](../lib/features/media/presentation/youtube_session.dart#L400) → nhường view → prepare → native attach → xác nhận | Một WebView/một parent, timeout 8 giây, trả phone nếu không nhận xác nhận; có chế độ thu nhỏ. |
+| Chuyển video | [showOnCar](../lib/features/media/presentation/youtube_session.dart#L411) → nhường view → prepare → native attach → xác nhận | Một WebView/một parent, timeout 8 giây, trả phone nếu không nhận xác nhận; có chế độ thu nhỏ. |
 | Lưu trữ | SQLite whereArgs/transaction; SharedPreferences | Kiểm tra BIN/tài khoản/tiền/CRC; sửa thông tin ẩn QR cũ. Chưa thấy ghép dữ liệu người dùng vào SQL thực thi. |
 | GPS/API | Người dùng bật GPS/tìm địa chỉ/xem tuyến/cập nhật ngân hàng | HTTPS, tọa độ hữu hạn, timeout/body cap; không tự bật GPS khi chỉ kết nối xe. |
 
@@ -60,7 +61,7 @@ mọi hành vi của WebView đang cài trên Redmi.
 
 ## Kiểm tra đã chạy và giới hạn
 
-- Analyze sạch; **67 Flutter**, **12 JavaScript**, **7 Android** tests qua.
+- Analyze sạch; **70 Flutter**, **13 JavaScript**, **7 Android** tests qua.
 - Native tests đo 60/40 và ba hàng, chế độ thu nhỏ, chuyển parent, manifest/PiP,
   stale QR và giải mã bitmap QR bằng ZXing.
 - `tool/browser_smoke.py`: Chromium **151.0.7922.34** phát HTML5 WebM thật từ

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/widgets.dart';
@@ -28,7 +29,11 @@ void main() {
   late FakePipController pip;
   late MemoryYouTubeHistory history;
   late FakeYouTubeBrowser browser;
+  Completer<void>? initializationGate;
+  var creations = 0;
   setUp(() {
+    initializationGate = null;
+    creations = 0;
     pip = FakePipController();
     history = MemoryYouTubeHistory();
     container = ProviderContainer(
@@ -39,7 +44,9 @@ void main() {
           MemoryYouTubeSettings(),
         ),
         youTubeBrowserFactoryProvider.overrideWithValue((callbacks) {
-          browser = FakeYouTubeBrowser(callbacks);
+          creations++;
+          browser = FakeYouTubeBrowser(callbacks)
+            ..initializationGate = initializationGate;
           return browser;
         }),
       ],
@@ -49,6 +56,61 @@ void main() {
     container.dispose();
     pip.dispose();
   });
+
+  test(
+    'concurrent initialization callers wait for the same complete browser setup',
+    () async {
+      initializationGate = Completer<void>();
+      final session = container.read(youTubeSessionProvider.notifier);
+      var firstDone = false, secondDone = false;
+      final first = session.ensureInitialized().then((_) => firstDone = true);
+      await Future<void>.delayed(Duration.zero);
+      final second = session.ensureInitialized().then((_) => secondDone = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(firstDone, isFalse);
+      expect(secondDone, isFalse);
+      initializationGate!.complete();
+      await Future.wait([first, second]);
+      expect(creations, 1);
+    },
+  );
+  test(
+    'pause cancels Play and a video selection waiting for initialization',
+    () async {
+      initializationGate = Completer<void>();
+      final session = container.read(youTubeSessionProvider.notifier);
+      final playing = session.play();
+      final selection = session.playId('abcdefghijk');
+      await Future<void>.delayed(Duration.zero);
+      await session.pause();
+      initializationGate!.complete();
+      await Future.wait([playing, selection]);
+      expect(browser.plays, 0);
+    },
+  );
+  test(
+    'Home cancels a car transfer still waiting for initialization',
+    () async {
+      initializationGate = Completer<void>();
+      const channel = MethodChannel('vn.thanhtaxixanh/car');
+      final calls = <String>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final session = container.read(youTubeSessionProvider.notifier);
+      final opening = session.showOnCar(true);
+      await Future<void>.delayed(Duration.zero);
+      await session.showOnCar(false);
+      initializationGate!.complete();
+      await opening;
+      expect(container.read(youTubeSessionProvider).carVideo, isFalse);
+      expect(calls, ['releaseCarVideo']);
+    },
+  );
 
   test(
     'backgrounding and leaving the video route preserve the session by default',

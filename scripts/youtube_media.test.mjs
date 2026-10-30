@@ -131,3 +131,14 @@ test('a later interruption while already backgrounded does not restart playback'
   assert.equal(p.state.timers.length, 0);
   assert.equal(p.state.plays, 0);
 });
+
+
+test('a cancelled Play rejection does not surface a stale playback error', async () => {
+  const p = page({ paused: true });
+  p.video.play = () => Promise.reject(new Error('interrupted by pause'));
+  p.api.play();
+  p.api.pause();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(p.state.messages.some(m => m.error), false);
+});

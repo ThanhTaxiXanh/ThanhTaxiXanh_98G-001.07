@@ -5,6 +5,7 @@
   var attached = new WeakSet();
   var compact = false;
   var pendingPlay = 0;
+  var commandSerial = 0;
   var backgroundAudio = true;
   var desiredPlaying = false;
   var backgroundResumeAttempted = false;
@@ -61,6 +62,7 @@
     }
   }
   function play() {
+    commandSerial++;
     desiredPlaying = true;
     pendingPlay = 8;
     attemptPlay();
@@ -69,12 +71,16 @@
     var v = video();
     if (!v || pendingPlay <= 0) return;
     pendingPlay = 0;
+    var serial = commandSerial;
     var result = v.play();
     if (result && result.catch) result.catch(function () {
-      send({ error: 'Trang YouTube chưa cho phát. Mở video trên điện thoại rồi thử lại.' });
+      if (serial === commandSerial && desiredPlaying) {
+        send({ error: 'Trang YouTube chưa cho phát. Mở video trên điện thoại rồi thử lại.' });
+      }
     });
   }
   function pause() {
+    commandSerial++;
     desiredPlaying = false;
     pendingPlay = 0;
     document.querySelectorAll('video,audio').forEach(function (v) { v.pause(); });
