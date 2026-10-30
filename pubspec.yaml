@@ -11,6 +11,8 @@ dependencies:
   flutter:
     sdk: flutter
   mt_carplay: ^1.7.1
+  diacritic: ^0.1.6
+  pretty_qr_code: ^3.6.0
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
   vietqr_widget: ^0.1.1+3

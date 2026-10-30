@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "vn.taxiauto.taxi_auto"
+    namespace = "vn.thanhtaxixanh.car98g00107"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "vn.taxiauto.taxi_auto"
+        applicationId = "vn.thanhtaxixanh.car98g00107"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

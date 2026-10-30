@@ -16,7 +16,7 @@ void main() {
       await tester.pumpWidget(const ProviderScope(child: TaxiAutoApp()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Taxi Auto'), findsOneWidget);
+      expect(find.text('Thanh Taxi Xanh'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
   });

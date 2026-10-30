@@ -1,8 +1,13 @@
 # Taxi Auto
 
-Flutter companion app scaffold for ThanhTaxiXanh. The initial APK opens a Vietnamese
-placeholder screen. Map, calendar, payment, media and settings are reserved modules;
-their production features and Android Auto projection are not implemented yet.
+Flutter companion app for ThanhTaxiXanh, with a Vietnamese lunar calendar and a
+VietQR generator ported from the two source files supplied by the owner. Android
+application ID and namespace: `vn.thanhtaxixanh.car98g00107`.
+
+The phone dashboard shows today's Gregorian/lunar date and Can Chi year in UTC+7.
+The payment form generates an account-transfer QR and supports gallery images for
+bank and center logos. Account information is currently session-only. Map, event
+CRUD, persisted settings, media and Android Auto projection remain unimplemented.
 
 ## Development
 
@@ -17,8 +22,8 @@ flutter run
 flutter build apk --release --split-per-abi
 ```
 
-`pubspec.yaml` lists the dependencies requested by the Master Prompt. Dependencies
-are not wired into the initial screen. Commit `pubspec.lock` when updating packages.
+`pubspec.yaml` lists the dependencies requested by the Master Prompt. Calendar, payment and Riverpod are integrated; other feature dependencies
+are reserved for later implementation. Commit `pubspec.lock` when updating packages.
 Native Android platform files are included; do not regenerate them for each build.
 
 ## Structure
@@ -29,10 +34,13 @@ Native Android platform files are included; do not regenerate them for each buil
 - Each feature has `data`, `domain`, and `presentation` layers. Domain will contain
   pure Dart models and repository contracts; data will implement contracts;
   presentation will use Riverpod providers to connect state and widgets.
-- `lib/features/dashboard/presentation`: initial companion screen.
-- `test/app_test.dart`: launch and layout checks for portrait and landscape screens.
+- `lib/features/dashboard/presentation`: calendar dashboard and payment entry.
+- `lib/features/calendar/domain/lunar_calendar.dart`: pure Dart lunar conversion.
+- `lib/features/payment/domain/viet_qr.dart`: account-transfer TLV and CRC.
+- `lib/features/payment/presentation`: form, card renderer and PNG capture API.
+- `test/`: domain, launch/layout, payment-form and PNG export tests.
 
-Directories with `.gitkeep` reserve boundaries. They do not contain implementations.
+Empty directories with `.gitkeep` reserve layers for future implementations.
 
 ## GitHub Actions and APKs
 
@@ -63,12 +71,44 @@ and Overpass are community services with usage policies and incomplete coverage;
 offline maps need an explicit tile source, download policy and cache. A nearby
 `maxspeed` tag alone does not establish the speed limit of the current road.
 
-The referenced `LunarCalendar.txt` and JavaScript QR shortcut were not supplied.
-Obtain these before porting their algorithms. Calendar tests must cover Vietnam's
-time zone, leap lunar months and year transitions. QR tests must verify EMV TLV
-byte lengths, bank/account fields and CRC against independent known-good payloads.
-The sample lunar date in the prompt is not a validated test vector. These domain
-algorithms and their required unit tests remain future implementation work.
+## Source ports and validation
+
+`LunarCalendar.txt` contains Kotlin based on the Ho Ngoc Duc algorithm. The Dart
+port retains its UTC+7 astronomical calculations and Can Chi names, with strict
+Gregorian input validation, nonexistent lunar-date rejection, and a corrected
+new-moon estimate boundary (the source could produce day 0 on 2054-05-07).
+The supported Gregorian range is 1900–2099. Inverse conversion returns a UTC
+`DateTime` carrying a civil date; it does not represent Vietnam midnight as an
+instant. `forInstant` handles the UTC+7 day boundary explicitly.
+
+Tests cover known Tet/leap-month dates, invalid leap flags, 29-day lunar months,
+and round trips across every Gregorian day in the supported range. This verifies
+conversion consistency; it is not an independent ephemeris certification.
+
+`JavaScript tạo QR.txt` supplies the EMV TLV construction and CRC-16/CCITT-FALSE
+logic. The Dart payload matches the inspected JavaScript section byte for byte for
+the fixtures in `test/fixtures/viet_qr_source.json`. Their CRCs were independently
+verified with Python's `binascii.crc_hqx` with initial value `0xffff`. Vietnamese
+normalization, nested TLV fields, zero/open amount and the standard CRC check vector
+are also tested. These are synthetic test accounts, not verified bank beneficiaries.
+
+Differences from the shortcut: negative/text/fractional amounts are rejected rather
+than silently stripping meaningful characters; thousands separators must be well
+formed. Bank BINs require six digits and accounts require 1–19 ASCII alphanumeric
+characters after whitespace removal. Zero retains the original open-amount
+behavior. The note is normalized to ASCII and capped at 50 characters.
+
+The QR matrix is generated by `pretty_qr_code`, replacing the shortcut's custom
+version-1–10 encoder. `VietQrCard` renders the card and optional logos with a
+four-module quiet zone, medium error correction normally and high with a center
+logo. `captureVietQrPng` captures a painted `RepaintBoundary` to PNG bytes, replacing
+`canvas.toDataURL`; callers can Base64-encode these bytes. The card export API is
+tested, but a save/share button is not implemented. No live bank transfer has been
+tested; verify recipient and amount in a banking app before using a generated code.
+
+The reference image shows a 3D vector map with extruded buildings. Matching it
+requires a renderer such as MapLibre/Mapbox, a style and a compatible building-data
+source. No 3D map or access token has been configured in this change.
 
 Media needs an audio handler, Android foreground service and lifecycle setup.
 Video playback needs parked-mode support from the host. YouTube integration needs

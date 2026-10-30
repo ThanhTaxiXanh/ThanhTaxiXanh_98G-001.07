@@ -8,7 +8,7 @@ class TaxiAutoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Taxi Auto',
+      title: 'Thanh Taxi Xanh',
       theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
       home: const DashboardScreen(),
     );
