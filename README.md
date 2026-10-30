@@ -12,8 +12,8 @@ Vietnamese lunar dates, including annual recurrence.
 The payment screen selects saved recipients and asks only for amount and note in
 daily use. Recipients, default selection, default note and optional footer/center
 logos are stored in the app's SQLite database. A searchable bank picker replaces
-manual bank-name/BIN entry. Map, media and Android Auto projection remain
-unimplemented.
+manual bank-name/BIN entry. A MapLibre 3D map, foreground GPS, address search and route preview are available.
+Media and Android Auto projection remain unimplemented.
 
 ## Development
 
@@ -76,10 +76,9 @@ screen. Validate `mt_carplay` Android templates, supported app categories and th
 target head unit before choosing an adapter. The initial screen runs on the phone;
 no Android Auto car service or manifest integration has been implemented.
 
-`flutter_map` supplies a 2D map. A true 3D map needs a different renderer. OSM tiles
-and Overpass are community services with usage policies and incomplete coverage;
-offline maps need an explicit tile source, download policy and cache. A nearby
-`maxspeed` tag alone does not establish the speed limit of the current road.
+The map currently runs on the phone/Android head unit as a regular app. It is
+not an Android Auto projection surface. Wide layouts use a 60/40 map/calendar
+split; narrow layouts open the map from **Mở bản đồ 3D**.
 
 ## Offline bank catalog and saved recipients
 
@@ -105,8 +104,8 @@ until updating, so an old payment request is not displayed as the new one.
 
 Use **Quản lý sự kiện** on the dashboard. Add, edit or delete an all-day event with
 a title, date and notes. Select **Dương lịch** or **Âm lịch**; lunar input also has
-an explicit leap-month flag and a Gregorian preview. **Lặp hằng năm** keeps the
-chosen calendar date. February 29 and dates in lunar leap months recur only in
+an explicit leap-month flag and a Gregorian preview. Monthly and annual repeat
+options keep the chosen calendar day/date. February 29 and dates in lunar leap months recur only in
 years containing that date; they are not shifted to another day. The dashboard
 shows the next occurrence of each event within 30 days (up to five entries), and
 the management screen includes all events, including past one-off entries.
@@ -116,6 +115,66 @@ app data. Uninstalling the app or clearing its data removes this local database.
 These are all-day calendar entries; notification alarms are not implemented.
 Tests reopen a real SQLite database, exercise create/edit/delete/default changes,
 check bank-cache failure handling, and cover the UI flows and lunar recurrence.
+
+## Event countdown and defaults
+
+Every upcoming occurrence shows **Còn N ngày** (or **Hôm nay**) with its actual
+Gregorian and lunar dates. Countdown arithmetic uses Vietnam civil days (UTC+7),
+not elapsed 24-hour periods from the current clock time. For example, from
+2026-10-29 the next first lunar day is 2026-11-09: **Còn 11 ngày**, **1/10 (Âm lịch)**.
+The count updates with the calendar clock and recurring events advance afterward.
+
+Nineteen editable/deletable default observances are inserted once, alongside
+existing personal events: monthly lunar mùng 1/rằm, New Year, International Women's
+Day, Reunification Day, Labour Day, Children's Day, National Day, Vietnamese Women's
+Day, Teachers' Day, Army Day, Christmas, Lunar New Year, Nguyên tiêu, Hùng Kings,
+Đoan Ngọ, Vu Lan, Mid-Autumn and Kitchen Gods. These are observances, not an official
+schedule of days off or compensating holidays. Deleted defaults are not recreated
+on restart. Monthly lunar occurrences include leap months. Invalid days are
+skipped rather than shifted. SQLite schema v2 adds monthly recurrence without
+replacing existing accounts/events; tests exercise a v1 database upgrade.
+
+## 3D map, GPS and route preview
+
+**Mở bản đồ 3D** opens MapLibre Native with the OpenFreeMap Liberty vector style and
+its extruded-building layer. Toggle **3D/2D**, pan/zoom/rotate, tap the GPS button or
+search for an address. Initial camera center is Hanoi; it is not a fabricated user
+location. Location permission is requested only after pressing GPS. Only foreground
+coarse/fine permissions are declared; GPS is stopped when the app goes to the
+background or the map session is disposed. Speed is measured GPS speed in km/h,
+with an accuracy indicator. Unknown speed is shown as a dash.
+
+Address search uses explicit submissions to Nominatim in Vietnam, identifies the
+app, caches repeated queries and paces new queries. It does not send autocomplete
+requests. Selecting a result or long-pressing the map chooses a destination.
+With an active GPS fix, **Xem tuyến ô tô** uses OSRM to draw a route with distance,
+approximate duration and a list of maneuvers. This is a route preview: no automatic
+rerouting, voice instructions, background navigation or downloaded offline map
+regions are implemented. Maps/search/routing need Internet and public service
+availability. Retain the native attribution control and OSM/OpenFreeMap credits.
+
+Overpass requests are bounded to a 1 km radius, a 15-second server budget and
+80 output records. Refreshes are paced/cached. Node traffic signs and road-center
+`maxspeed` records can be inspected under **OSM lân cận**, including distance and
+snapshot time. They are nearby records, not a matched speed limit for the road
+being driven. Missing/incomplete data and request failures are surfaced; a failed
+query is not reported as an absence of signs. Current coordinates are sent to
+Overpass/OSRM only for these requested map features; searches go to Nominatim.
+
+Public endpoints: [OpenFreeMap](https://openfreemap.org/),
+[Nominatim policy](https://operations.osmfoundation.org/policies/nominatim/),
+[OSRM](https://project-osrm.org/), [Overpass](https://overpass-api.de/).
+These shared public services are suitable for evaluation and have no service
+availability guarantee; production deployments should choose suitable hosted or
+self-hosted services and honor each provider's usage policy.
+
+Map tests cover parsing, GPS permissions/pause, stale route-result suppression,
+Haversine distance, speed units, cache/rate limits, failures and Flutter control
+flows. The native viewport is replaced by a test surface in widget tests. Live
+search and a short Hanoi route were checked successfully; the live Overpass probe
+timed out and its failure handling is covered. Native 3D rendering and physical
+GPS accuracy still need a real-device check; no emulator/physical device is
+attached to this environment.
 
 ## Source ports and validation
 
@@ -152,9 +211,9 @@ logo. `captureVietQrPng` captures a painted `RepaintBoundary` to PNG bytes, repl
 tested, but a save/share button is not implemented. No live bank transfer has been
 tested; verify recipient and amount in a banking app before using a generated code.
 
-The reference image shows a 3D vector map with extruded buildings. Matching it
-requires a renderer such as MapLibre/Mapbox, a style and a compatible building-data
-source. No 3D map or access token has been configured in this change.
+The reference image motivates the extruded-building map. MapLibre/OpenFreeMap now
+provide that rendering path without an access token; building detail follows the
+available vector data and is not a photorealistic building model.
 
 Media needs an audio handler, Android foreground service and lifecycle setup.
 Video playback needs parked-mode support from the host. YouTube integration needs

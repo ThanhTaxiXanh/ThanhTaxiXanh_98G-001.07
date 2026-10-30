@@ -5,6 +5,7 @@ import 'package:taxi_auto/features/calendar/domain/calendar_event.dart';
 import 'package:taxi_auto/features/calendar/presentation/calendar_providers.dart';
 import 'package:taxi_auto/features/calendar/presentation/event_providers.dart';
 import 'package:taxi_auto/features/payment/domain/bank.dart';
+import 'package:taxi_auto/features/map/presentation/native_map_surface.dart';
 import 'package:taxi_auto/features/payment/domain/recipient_account.dart';
 import 'package:taxi_auto/features/payment/presentation/payment_providers.dart';
 
@@ -93,6 +94,12 @@ Widget testApp({
   return ProviderScope(
     key: UniqueKey(),
     overrides: [
+      mapSurfaceBuilderProvider.overrideWithValue(
+        (_) => const ColoredBox(
+          key: Key('test-map-surface'),
+          color: Color(0xffe8eff3),
+        ),
+      ),
       recipientRepositoryProvider.overrideWith(
         (ref) async => recipients ?? MemoryRecipients(),
       ),

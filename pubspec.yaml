@@ -1,7 +1,7 @@
 name: taxi_auto
 description: Modular Flutter companion application for taxi drivers.
 publish_to: none
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -15,6 +15,8 @@ dependencies:
   mt_carplay: ^1.7.1
   diacritic: ^0.1.6
   pretty_qr_code: ^3.6.0
+  maplibre_gl: ^0.27.1
+  geolocator: ^14.1.2
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
   vietqr_widget: ^0.1.1+3
