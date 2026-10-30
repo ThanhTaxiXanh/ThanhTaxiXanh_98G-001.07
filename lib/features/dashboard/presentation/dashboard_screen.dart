@@ -6,6 +6,7 @@ import '../../calendar/presentation/upcoming_events_card.dart';
 import '../../payment/presentation/payment_screen.dart';
 import '../../map/presentation/driving_map.dart';
 import '../../media/presentation/youtube_screen.dart';
+import '../../media/presentation/media_card.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -92,6 +93,8 @@ class DashboardScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
         const UpcomingEventsCard(),
+        const SizedBox(height: 24),
+        const MediaCard(),
         const SizedBox(height: 24),
         if (showMapButton) ...[
           FilledButton.icon(

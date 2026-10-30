@@ -46,3 +46,21 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    implementation("androidx.car.app:app:1.7.0")
+    implementation("org.maplibre.gl:android-sdk-opengl:13.5.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("com.google.zxing:core:3.5.3")
+}
+android.testOptions.unitTests.isIncludeAndroidResources = true
+
+// AGP 9 packages host tests from merged assets. Flutter augments that directory
+// after merge, so host-test packaging must also wait for Flutter's copy task.
+tasks.configureEach {
+    if (name.startsWith("package") && name.endsWith("UnitTestForUnitTest")) {
+        val variant = name.removePrefix("package").removeSuffix("UnitTestForUnitTest")
+        dependsOn("copyFlutterAssets$variant")
+    }
+}

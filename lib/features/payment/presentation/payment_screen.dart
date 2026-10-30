@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/recipient_account.dart';
 import '../domain/viet_qr.dart';
 import 'payment_providers.dart';
+import 'payment_preview.dart';
 import 'recipient_editor_screen.dart';
 import 'viet_qr_card.dart';
 
@@ -23,6 +24,20 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   RecipientAccount? _previewAccount;
   String? _error;
   bool _busy = false;
+  int _previewGeneration = 0;
+  void _sharePreview({bool editing = false}) {
+    final generation = ++_previewGeneration;
+    final preview = PaymentPreview(
+      account: _previewAccount,
+      payment: editing ? null : _payment,
+      editing: editing,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && generation == _previewGeneration) {
+        ref.read(paymentPreviewProvider.notifier).update(preview);
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -53,12 +68,19 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       _payment = account?.payment();
       _error = null;
     });
+    _sharePreview();
   }
 
-  void _dirty() => setState(() {
-    _payment = null;
-    _error = null;
-  });
+  void _dirty() {
+    setState(() {
+      _payment = null;
+      _error = null;
+    });
+    _previewGeneration++;
+    ref
+        .read(paymentPreviewProvider.notifier)
+        .update(PaymentPreview(account: _previewAccount, editing: true));
+  }
 
   Future<void> _edit([RecipientAccount? account]) async {
     final id = await Navigator.of(context).push<String>(
@@ -80,6 +102,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         _error = null;
       });
       FocusScope.of(context).unfocus();
+      _sharePreview();
     } on ArgumentError {
       setState(() {
         _payment = null;

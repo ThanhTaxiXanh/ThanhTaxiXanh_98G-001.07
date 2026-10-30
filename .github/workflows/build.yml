@@ -24,6 +24,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle*
+            android/gradle/wrapper/gradle-wrapper.properties
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -32,7 +36,7 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get --enforce-lockfile
       - name: Check Dart formatting
-        run: dart format --output=none --set-exit-if-changed lib test
+        run: dart format --output=none --set-exit-if-changed lib test tool
       - name: Analyze
         run: flutter analyze
       - name: Test
@@ -41,7 +45,12 @@ jobs:
         with:
           node-version: '22'
       - name: Test YouTube DOM filter
-        run: node --test scripts/youtube_filter.test.mjs
+        run: node --test scripts/*.test.mjs
+      - name: Generate cross-platform QR fixture
+        run: dart run tool/generate_car_qr_fixture.dart
+      - name: Test native car templates and QR rendering
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
       - name: Build release APKs for testing
         run: flutter build apk --release --split-per-abi
       - name: Upload APKs

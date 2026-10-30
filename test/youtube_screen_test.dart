@@ -87,7 +87,7 @@ void main() {
       await tester.tap(find.byKey(const Key('youtube-back')));
       await tester.pumpAndSettle();
       expect(find.text('Mở YouTube'), findsOneWidget);
-      expect(browser.closed, isTrue);
+      expect(browser.closed, isFalse);
       expect(browser.viewDisposals, 1);
     },
   );
@@ -127,7 +127,7 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pump();
-      expect(browser.pauses, greaterThan(pauses));
+      expect(browser.pauses, pauses);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -179,6 +179,14 @@ class _Browser implements YouTubeBrowser {
 
   @override
   Future<void> pause() async => pauses++;
+  @override
+  Future<void> play() async {}
+  @override
+  Future<void> seek(Duration position) async {}
+  @override
+  Future<void> setCompact(bool compact) async {}
+  @override
+  Future<void> setBackgroundAudio(bool enabled) async {}
   @override
   Future<void> reload() async => reloads++;
   @override

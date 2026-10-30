@@ -4,13 +4,18 @@ import '../domain/map_models.dart';
 
 class DeviceLocationService implements LocationService {
   @override
-  Future<void> ensureReady() async {
+  Future<void> ensureReady({bool allowPermissionRequest = true}) async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw const MapServiceException(
         'Hãy bật dịch vụ vị trí trên điện thoại rồi thử lại.',
       );
     }
     var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied && !allowPermissionRequest) {
+      throw const MapServiceException(
+        'Mở ứng dụng trên điện thoại và cấp quyền vị trí trước khi bật GPS trên Android Auto.',
+      );
+    }
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
@@ -23,7 +28,7 @@ class DeviceLocationService implements LocationService {
   }
 
   @override
-  Stream<GpsFix> watch() =>
+  Stream<GpsFix> watch({bool backgroundNavigation = false}) =>
       Geolocator.getPositionStream(
             locationSettings: AndroidSettings(
               accuracy: LocationAccuracy.high,
@@ -31,6 +36,15 @@ class DeviceLocationService implements LocationService {
               timeLimit: const Duration(seconds: 30),
               distanceFilter: 0,
               intervalDuration: const Duration(seconds: 2),
+              foregroundNotificationConfig: backgroundNavigation
+                  ? const ForegroundNotificationConfig(
+                      notificationTitle: 'Thanh Taxi Xanh',
+                      notificationText:
+                          'Vị trí đang dùng cho bản đồ Android Auto',
+                      enableWakeLock: true,
+                      setOngoing: true,
+                    )
+                  : null,
             ),
           )
           .where((p) => GeoPoint(p.latitude, p.longitude).isValid)

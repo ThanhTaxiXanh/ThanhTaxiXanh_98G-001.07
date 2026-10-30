@@ -32,6 +32,7 @@ class _DrivingMapState extends ConsumerState<DrivingMap>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       final current = ref.read(mapSessionProvider);
+      if (current.carNavigationActive) return;
       _resumeGps = _resumeGps || current.gpsActive || current.requestingGps;
       ref.read(mapSessionProvider.notifier).pauseGps();
     } else if (state == AppLifecycleState.resumed && _resumeGps) {

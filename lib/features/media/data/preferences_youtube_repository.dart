@@ -18,6 +18,8 @@ class PreferencesYouTubeRepository implements YouTubeSettingsRepository {
       final link = json['lastLocation'];
       final uri = link is String ? Uri.tryParse(link) : null;
       return YouTubeSettings(
+        backgroundAudio: json['backgroundAudio'] != false,
+        autoPip: json['autoPip'] != false,
         filterAds: json['filterAds'] is bool ? json['filterAds'] as bool : true,
         lastLocation: uri == null ? null : YouTubeLocation.forStorage(uri),
       );
@@ -33,6 +35,8 @@ class PreferencesYouTubeRepository implements YouTubeSettingsRepository {
     final saved = await preferences.setString(
       storageKey,
       jsonEncode({
+        'backgroundAudio': settings.backgroundAudio,
+        'autoPip': settings.autoPip,
         'filterAds': settings.filterAds,
         'lastLocation': last == null
             ? null

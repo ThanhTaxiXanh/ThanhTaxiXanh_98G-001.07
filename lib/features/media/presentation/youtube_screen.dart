@@ -1,11 +1,9 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../domain/youtube_location.dart';
-import 'youtube_browser.dart';
 import 'youtube_providers.dart';
+import 'youtube_session.dart';
 
 class YouTubeScreen extends ConsumerStatefulWidget {
   const YouTubeScreen({super.key});
@@ -13,210 +11,93 @@ class YouTubeScreen extends ConsumerStatefulWidget {
   ConsumerState<YouTubeScreen> createState() => _YouTubeScreenState();
 }
 
-class _YouTubeScreenState extends ConsumerState<YouTubeScreen>
-    with WidgetsBindingObserver {
+class _YouTubeScreenState extends ConsumerState<YouTubeScreen> {
   final _input = TextEditingController();
-  YouTubeBrowser? _browser;
-  Widget? _fullscreen;
-  Timer? _rememberTimer;
-  bool _initializing = false, _canGoBack = false;
-  bool _foreground = true;
-  int _progress = 0;
-  int _historyGeneration = 0;
-  String? _error;
-
+  late final YouTubeSession _session;
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    unawaited(_initialize());
-  }
-
-  Future<void> _initialize() async {
-    if (_initializing) return;
-    _initializing = true;
-    try {
-      final settings = await ref.read(youTubeSettingsProvider.future);
-      if (!mounted) return;
-      final browser = ref.read(youTubeBrowserFactoryProvider)(
-        YouTubeBrowserCallbacks(
-          onProgress: (value) {
-            if (mounted) setState(() => _progress = value);
-          },
-          onLocation: _locationChanged,
-          onReady: () {
-            unawaited(_refreshHistory());
-            unawaited(_applyFiltering());
-          },
-          onError: _showError,
-          onFullscreen: (widget) {
-            if (mounted) setState(() => _fullscreen = widget);
-          },
-        ),
-      );
-      setState(() {
-        _browser = browser;
-        _error = null;
-      });
-      await browser.initialize(settings.startLocation);
-    } catch (_) {
-      _browser?.close();
-      if (mounted) setState(() => _browser = null);
-      _showError('Không mở được YouTube trên thiết bị này. Vui lòng thử lại.');
-    } finally {
-      _initializing = false;
-    }
-  }
-
-  void _showError(String message) {
-    if (mounted) {
-      setState(() {
-        _error = message;
-        _progress = 100;
-      });
-    }
-  }
-
-  void _locationChanged(Uri uri) {
-    if (!mounted) return;
-    unawaited(_refreshHistory());
-    _rememberTimer?.cancel();
-    _rememberTimer = Timer(const Duration(milliseconds: 350), () async {
-      if (!mounted) return;
-      try {
-        await ref.read(youTubeSettingsProvider.notifier).remember(uri);
-      } catch (_) {
-        _showError('Chưa lưu được trang gần nhất. Bạn vẫn có thể xem video.');
-      }
-    });
-  }
-
-  Future<void> _refreshHistory() async {
-    final generation = ++_historyGeneration;
-    try {
-      final value = await _browser?.canGoBack() ?? false;
-      if (mounted && generation == _historyGeneration) {
-        setState(() => _canGoBack = value);
-      }
-    } catch (_) {
-      // A disposed native view can finish an outstanding history request.
-    }
-  }
-
-  Future<void> _applyFiltering() async {
-    if (!mounted) return;
-    final enabled =
-        _foreground &&
-        (ref.read(youTubeSettingsProvider).asData?.value.filterAds ?? true);
-    try {
-      await _browser?.setFiltering(enabled);
-    } catch (_) {
-      _showError(
-        'Chưa kích hoạt được bộ lọc quảng cáo. '
-        'Thử tải lại hoặc tắt bộ lọc nếu video không phát.',
-      );
-    }
-  }
-
-  Future<void> _toggleFiltering() async {
-    final current = ref.read(youTubeSettingsProvider).asData?.value;
-    if (current == null) return;
-    try {
-      await ref
-          .read(youTubeSettingsProvider.notifier)
-          .setFilter(!current.filterAds);
-    } catch (_) {
-      _showError('Chưa lưu được cài đặt bộ lọc cho lần mở sau.');
-    }
-    if (mounted) await _applyFiltering();
-  }
-
-  Future<void> _load(Uri uri) async {
-    FocusScope.of(context).unfocus();
-    setState(() => _error = null);
-    try {
-      await _browser?.pause().catchError((Object _) {});
-      await _browser?.load(uri);
-    } catch (_) {
-      _showError('Chưa mở được trang YouTube. Vui lòng thử lại.');
-    }
-  }
-
-  void _submit() {
-    try {
-      unawaited(_load(YouTubeLocation.fromInput(_input.text)));
-    } on FormatException catch (error) {
-      _showError(error.message);
-    }
-  }
-
-  Future<void> _back() async {
-    if (_fullscreen != null) {
-      _browser?.exitFullscreen();
-      return;
-    }
-    try {
-      if (await _browser?.canGoBack() ?? false) {
-        await _browser?.goBack();
-        await _refreshHistory();
-      } else if (mounted) {
-        Navigator.of(context).pop();
-      }
-    } catch (_) {
-      _showError('Chưa quay lại được trang trước. Thử mở trang chủ.');
-    }
-  }
-
-  Future<void> _retry() async {
-    setState(() => _error = null);
-    if (_browser == null) {
-      ref.invalidate(youTubeSettingsProvider);
-      await _initialize();
-    } else {
-      try {
-        await _browser!.reload();
-      } catch (_) {
-        _showError('Chưa tải lại được YouTube. Kiểm tra mạng rồi thử lại.');
-      }
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _foreground = state == AppLifecycleState.resumed;
-    if (!_foreground) {
-      unawaited(_browser?.pause().catchError((Object _) {}));
-    } else {
-      unawaited(_applyFiltering());
-    }
+    _session = ref.read(youTubeSessionProvider.notifier);
+    _session.setVisible(true);
+    unawaited(_session.ensureInitialized());
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _rememberTimer?.cancel();
-    _browser?.close();
+    _session.setVisible(false);
     _input.dispose();
     super.dispose();
+  }
+
+  void _submit() {
+    FocusScope.of(context).unfocus();
+    try {
+      unawaited(_session.load(YouTubeLocation.fromInput(_input.text)));
+    } on FormatException catch (error) {
+      _session.showError(error.message);
+    }
+  }
+
+  Future<void> _back() async {
+    final state = ref.read(youTubeSessionProvider);
+    if (state.fullscreen != null) {
+      _session.exitFullscreen();
+      return;
+    }
+    if (state.canGoBack) {
+      await _session.goBack();
+      return;
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _option(String value) async {
+    final settings = ref.read(youTubeSettingsProvider).asData?.value;
+    final controller = ref.read(youTubeSettingsProvider.notifier);
+    try {
+      if (value == 'background' && settings != null) {
+        await controller.setBackgroundAudio(!settings.backgroundAudio);
+      } else if (value == 'autoPip' && settings != null) {
+        await controller.setAutoPip(!settings.autoPip);
+      } else if (value == 'stop') {
+        await _session.stop();
+      } else if (value == 'help' && mounted) {
+        _showHelp();
+      }
+    } catch (_) {
+      _session.showError('Chưa lưu được cài đặt cho lần mở sau.');
+    }
+  }
+
+  Future<void> _filter() async {
+    final settings = ref.read(youTubeSettingsProvider).asData?.value;
+    if (settings == null) return;
+    try {
+      await ref
+          .read(youTubeSettingsProvider.notifier)
+          .setFilter(!settings.filterAds);
+    } catch (_) {
+      _session.showError('Chưa lưu được cài đặt bộ lọc.');
+    }
   }
 
   void _showHelp() {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) => const SafeArea(
+      builder: (_) => const SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(24),
           child: Text(
-            'YouTube dành cho màn hình riêng của hành khách.\n\n'
-            'Bộ lọc quảng cáo đang thử nghiệm: ẩn các ô quảng cáo và '
-            'bỏ qua quảng cáo khi trang nhận diện được. '
-            'Có thể vẫn xuất hiện quảng cáo khi YouTube thay đổi. '
-            'Tắt bộ lọc nếu video không phát.\n\n'
-            'Cần Internet. Có thể xem video công khai không cần đăng nhập. '
-            'Google có thể không cho đăng nhập bên trong WebView.\n\n'
-            'Việc chiếu lên Android Auto phụ thuộc bộ nhận và điện thoại; '
-            'bản này chưa xác nhận hỗ trợ chiếu video khi xe di chuyển.',
+            'Chọn video rồi dùng nút PiP để xem trong cửa sổ nhỏ trên Android. '
+            'Có thể bật/tắt tự vào PiP khi về màn hình chính.\n\n'
+            'Phát nền giữ phiên nghe khi quay về trang chính, chuyển ứng dụng hoặc khóa màn hình. '
+            'Điều khiển phát/tạm dừng/dừng ở thông báo, màn hình khóa hoặc Android Auto. '
+            'YouTube có thể giới hạn phát nền của video/tài khoản; PiP giữ video hiển thị.\n\n'
+            'Android Auto nhận phiên âm thanh và danh sách video gần đây. '
+            'Android Auto không nhận cửa sổ PiP Android hoặc video WebView qua dịch vụ media.\n\n'
+            'Bộ lọc quảng cáo đang thử nghiệm. Tắt bộ lọc nếu video không phát. '
+            'Cần Internet; Google có thể từ chối đăng nhập trong WebView.',
           ),
         ),
       ),
@@ -225,15 +106,16 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(youTubeSessionProvider);
     final settings = ref.watch(youTubeSettingsProvider).asData?.value;
-    final fullscreen = _fullscreen;
+    final compact = state.inPip || state.fullscreen != null;
     return PopScope(
-      canPop: fullscreen == null && !_canGoBack,
+      canPop: state.fullscreen == null && !state.canGoBack,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) unawaited(_back());
       },
       child: Scaffold(
-        appBar: fullscreen != null
+        appBar: compact
             ? null
             : AppBar(
                 leading: IconButton(
@@ -242,47 +124,76 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen>
                   onPressed: _back,
                   icon: const Icon(Icons.arrow_back),
                 ),
-                title: const Text('YouTube • Khách'),
+                title: const Text(
+                  'YouTube • Khách',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 actions: [
+                  IconButton(
+                    key: const Key('youtube-pip'),
+                    tooltip: 'Hình trong hình (PiP)',
+                    onPressed: _session.enterPip,
+                    icon: const Icon(Icons.picture_in_picture_alt),
+                  ),
                   IconButton(
                     key: const Key('youtube-filter'),
                     tooltip: settings?.filterAds == true
                         ? 'Lọc quảng cáo: bật (thử nghiệm)'
                         : 'Lọc quảng cáo: tắt',
-                    onPressed: settings == null ? null : _toggleFiltering,
+                    onPressed: settings == null ? null : _filter,
                     icon: Icon(
                       settings?.filterAds == true
                           ? Icons.shield_outlined
                           : Icons.gpp_bad_outlined,
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Thông tin YouTube',
-                    onPressed: _showHelp,
-                    icon: const Icon(Icons.info_outline),
+                  PopupMenuButton<String>(
+                    tooltip: 'Cài đặt YouTube',
+                    onSelected: _option,
+                    itemBuilder: (_) => [
+                      CheckedPopupMenuItem(
+                        value: 'background',
+                        checked: settings?.backgroundAudio ?? true,
+                        child: const Text('Phát âm thanh nền'),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: 'autoPip',
+                        checked: settings?.autoPip ?? true,
+                        child: const Text('Tự bật PiP khi về Home'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'stop',
+                        child: Text('Dừng phát'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'help',
+                        child: Text('Thông tin YouTube'),
+                      ),
+                    ],
                   ),
                 ],
               ),
         body: Stack(
           fit: StackFit.expand,
           children: [
-            // Keep the native WebView mounted while its fullscreen video custom
-            // view is shown, so switching modes cannot destroy the session.
-            Offstage(
-              offstage: fullscreen != null,
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    Padding(
+            SafeArea(
+              top: !state.inPip,
+              bottom: !state.inPip,
+              child: Column(
+                children: [
+                  Offstage(
+                    offstage: compact,
+                    child: Padding(
                       padding: const EdgeInsets.all(8),
                       child: Row(
                         children: [
                           IconButton(
                             key: const Key('youtube-home'),
                             tooltip: 'Trang chủ YouTube',
-                            onPressed: _browser == null
-                                ? null
-                                : () => _load(YouTubeLocation.home),
+                            onPressed: state.initialized
+                                ? () => _session.load(YouTubeLocation.home)
+                                : null,
                             icon: const Icon(Icons.home_outlined),
                           ),
                           Expanded(
@@ -299,7 +210,7 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen>
                                 suffixIcon: IconButton(
                                   key: const Key('youtube-submit'),
                                   tooltip: 'Tìm kiếm',
-                                  onPressed: _browser == null ? null : _submit,
+                                  onPressed: state.initialized ? _submit : null,
                                   icon: const Icon(Icons.search),
                                 ),
                               ),
@@ -308,60 +219,76 @@ class _YouTubeScreenState extends ConsumerState<YouTubeScreen>
                           IconButton(
                             key: const Key('youtube-reload'),
                             tooltip: 'Tải lại',
-                            onPressed: _retry,
+                            onPressed: _session.reload,
                             icon: const Icon(Icons.refresh),
                           ),
                         ],
                       ),
                     ),
-                    if (_progress < 100)
-                      LinearProgressIndicator(
-                        value: _progress == 0 ? null : _progress / 100,
-                      ),
-                    if (_error != null)
-                      Flexible(
-                        child: SingleChildScrollView(
-                          child: MaterialBanner(
-                            content: Text(_error!),
-                            actions: [
-                              TextButton(
-                                onPressed: () => setState(() => _error = null),
-                                child: const Text('Đóng'),
-                              ),
-                            ],
-                          ),
+                  ),
+                  if (!compact && state.progress < 100)
+                    LinearProgressIndicator(
+                      value: state.progress == 0 ? null : state.progress / 100,
+                    ),
+                  if (!compact && state.message != null)
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: MaterialBanner(
+                          content: Text(state.message!),
+                          actions: [
+                            TextButton(
+                              onPressed: _session.clearError,
+                              child: const Text('Đóng'),
+                            ),
+                          ],
                         ),
                       ),
-                    Expanded(
-                      flex: 4,
+                    ),
+                  Expanded(
+                    flex: 4,
+                    child: Offstage(
+                      offstage: state.fullscreen != null,
                       child:
-                          _browser?.buildView(context) ??
+                          _session.browser?.buildView(context) ??
                           const Center(child: Text('Đang mở YouTube…')),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            if (fullscreen != null)
+            if (state.fullscreen != null)
               Positioned.fill(
                 child: ColoredBox(
                   color: Colors.black,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      fullscreen,
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: SafeArea(
-                          child: IconButton.filledTonal(
-                            key: const Key('youtube-exit-fullscreen'),
-                            tooltip: 'Thoát toàn màn hình',
-                            onPressed: () => _browser?.exitFullscreen(),
-                            icon: const Icon(Icons.fullscreen_exit),
+                      state.fullscreen!,
+                      if (!state.inPip)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: SafeArea(
+                            child: Row(
+                              children: [
+                                IconButton.filledTonal(
+                                  tooltip: 'Hình trong hình (PiP)',
+                                  onPressed: _session.enterPip,
+                                  icon: const Icon(
+                                    Icons.picture_in_picture_alt,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton.filledTonal(
+                                  key: const Key('youtube-exit-fullscreen'),
+                                  tooltip: 'Thoát toàn màn hình',
+                                  onPressed: _session.exitFullscreen,
+                                  icon: const Icon(Icons.fullscreen_exit),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),

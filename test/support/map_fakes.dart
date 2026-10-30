@@ -43,14 +43,19 @@ class FakeLocationService implements LocationService {
   final positions = StreamController<GpsFix>.broadcast(sync: true);
   bool denied = false;
   int permissions = 0;
+  bool? backgroundRequested;
   @override
-  Future<void> ensureReady() async {
+  Future<void> ensureReady({bool allowPermissionRequest = true}) async {
     permissions++;
     if (denied) throw const MapServiceException('Vị trí bị từ chối.');
   }
 
   @override
-  Stream<GpsFix> watch() => positions.stream;
+  Stream<GpsFix> watch({bool backgroundNavigation = false}) {
+    backgroundRequested = backgroundNavigation;
+    return positions.stream;
+  }
+
   void sendFix() => positions.add(
     GpsFix(
       point: const GeoPoint(21, 105),

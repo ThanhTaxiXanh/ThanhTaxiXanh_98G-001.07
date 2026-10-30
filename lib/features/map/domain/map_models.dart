@@ -130,8 +130,8 @@ abstract interface class MapRepository {
 }
 
 abstract interface class LocationService {
-  Future<void> ensureReady();
-  Stream<GpsFix> watch();
+  Future<void> ensureReady({bool allowPermissionRequest = true});
+  Stream<GpsFix> watch({bool backgroundNavigation = false});
 }
 
 String formatDistance(double meters) => meters >= 1000

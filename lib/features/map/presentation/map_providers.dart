@@ -30,6 +30,7 @@ class MapSessionState {
     this.is3D = true,
     this.message,
     this.trafficMessage,
+    this.carNavigationActive = false,
   });
   final GpsFix? fix;
   final MapPlace? destination;
@@ -42,6 +43,7 @@ class MapSessionState {
       follow,
       is3D;
   final String? message, trafficMessage;
+  final bool carNavigationActive;
   MapSessionState copy({
     GpsFix? fix,
     MapPlace? destination,
@@ -60,6 +62,7 @@ class MapSessionState {
     bool clearDestination = false,
     bool clearMessage = false,
     bool clearTrafficMessage = false,
+    bool? carNavigationActive,
   }) => MapSessionState(
     fix: clearFix ? null : fix ?? this.fix,
     destination: clearDestination ? null : destination ?? this.destination,
@@ -75,6 +78,7 @@ class MapSessionState {
     trafficMessage: clearTrafficMessage
         ? null
         : trafficMessage ?? this.trafficMessage,
+    carNavigationActive: carNavigationActive ?? this.carNavigationActive,
   );
 }
 
@@ -100,38 +104,48 @@ class MapSession extends Notifier<MapSessionState> {
   String _friendly(Object error, String fallback) =>
       error is MapServiceException ? error.message : fallback;
 
-  Future<void> enableGps() async {
+  Future<void> enableGps({bool backgroundNavigation = false}) async {
     if (state.requestingGps) return;
-    if (state.gpsActive) {
+    if (state.gpsActive &&
+        (!backgroundNavigation || state.carNavigationActive)) {
       state = state.copy(follow: true);
       return;
     }
+    if (state.gpsActive) pauseGps();
     final generation = ++_gpsGeneration;
     final service = ref.read(locationServiceProvider);
     state = state.copy(requestingGps: true, clearFix: true, clearMessage: true);
     try {
-      await service.ensureReady();
+      await service.ensureReady(allowPermissionRequest: !backgroundNavigation);
       if (!ref.mounted || generation != _gpsGeneration) return;
-      state = state.copy(requestingGps: false, gpsActive: true, follow: true);
-      _subscription = service.watch().listen(
-        (fix) {
-          if (!ref.mounted || generation != _gpsGeneration) return;
-          state = state.copy(fix: fix, gpsActive: true);
-          unawaited(refreshTraffic());
-        },
-        onError: (Object error) {
-          if (!ref.mounted || generation != _gpsGeneration) return;
-          unawaited(_subscription?.cancel());
-          state = state.copy(
-            gpsActive: false,
-            requestingGps: false,
-            message: _friendly(
-              error,
-              'Chưa nhận được vị trí GPS. Vui lòng thử lại.',
-            ),
-          );
-        },
+      state = state.copy(
+        requestingGps: false,
+        gpsActive: true,
+        follow: true,
+        carNavigationActive: backgroundNavigation,
       );
+      _subscription = service
+          .watch(backgroundNavigation: backgroundNavigation)
+          .listen(
+            (fix) {
+              if (!ref.mounted || generation != _gpsGeneration) return;
+              state = state.copy(fix: fix, gpsActive: true);
+              unawaited(refreshTraffic());
+            },
+            onError: (Object error) {
+              if (!ref.mounted || generation != _gpsGeneration) return;
+              unawaited(_subscription?.cancel());
+              state = state.copy(
+                gpsActive: false,
+                requestingGps: false,
+                carNavigationActive: false,
+                message: _friendly(
+                  error,
+                  'Chưa nhận được vị trí GPS. Vui lòng thử lại.',
+                ),
+              );
+            },
+          );
     } catch (error) {
       if (ref.mounted && generation == _gpsGeneration) {
         state = state.copy(
@@ -155,6 +169,7 @@ class MapSession extends Notifier<MapSessionState> {
       requestingGps: false,
       follow: false,
       clearFix: true,
+      carNavigationActive: false,
     );
   }
 

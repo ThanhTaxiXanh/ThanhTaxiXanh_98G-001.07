@@ -50,7 +50,7 @@ packages:
     source: hosted
     version: "0.1.4"
   audio_session:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: audio_session
       sha256: f9e7711a0e24ca8b40f5d7ac374c3c6e55016f3157912badd18199cdbbca5c4d
@@ -814,7 +814,7 @@ packages:
     source: hosted
     version: "2.2.1"
   qr:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: qr
       sha256: "2c0189dca64a3ab08dda7acd7911c89af2374f08eb4eaded3e8ef4609f3b9c8b"
@@ -838,7 +838,7 @@ packages:
     source: hosted
     version: "3.4.3"
   rxdart:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: rxdart
       sha256: "5c3004a4a8dbb94bd4bf5412a4def4acdaa12e12f269737a5751369e12d1a962"

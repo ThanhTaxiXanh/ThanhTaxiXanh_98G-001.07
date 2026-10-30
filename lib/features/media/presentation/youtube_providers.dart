@@ -25,6 +25,16 @@ class YouTubeSettingsController extends AsyncNotifier<YouTubeSettings> {
     await _save(current.copy(filterAds: enabled));
   }
 
+  Future<void> setBackgroundAudio(bool enabled) async {
+    final current = state.asData?.value;
+    if (current != null) await _save(current.copy(backgroundAudio: enabled));
+  }
+
+  Future<void> setAutoPip(bool enabled) async {
+    final current = state.asData?.value;
+    if (current != null) await _save(current.copy(autoPip: enabled));
+  }
+
   Future<void> remember(Uri uri) async {
     final location = YouTubeLocation.forStorage(uri);
     final current = state.asData?.value;

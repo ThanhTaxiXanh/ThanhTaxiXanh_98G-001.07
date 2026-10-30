@@ -13,10 +13,11 @@ The payment screen selects saved recipients and asks only for amount and note in
 daily use. Recipients, default selection, default note and optional footer/center
 logos are stored in the app's SQLite database. A searchable bank picker replaces
 manual bank-name/BIN entry. A MapLibre 3D map, foreground GPS, address search and route preview are available.
-A passenger YouTube browser with an experimental DOM ad filter is available in
-the regular Android app. Background audio and Android Auto projection remain
-unimplemented. YouTube video while moving on a projected passenger screen is a
-required, **unresolved** feature; the browser does not fulfill that requirement.
+A passenger YouTube browser now has a shared background playback session,
+Android picture-in-picture and MediaSession/MediaBrowser integration. Android
+Auto has an audio browser and a native map/dashboard template service.
+YouTube video/PiP on the projected car screen remains **unresolved**; the audio
+media service does not transport video.
 
 ## Development
 
@@ -24,10 +25,12 @@ Use Flutter **3.47.9 stable** (Dart 3.13.7), an Android SDK, and JDK 21.
 
 ```sh
 flutter pub get --enforce-lockfile
-dart format --output=none --set-exit-if-changed lib test
+dart format --output=none --set-exit-if-changed lib test tool
 flutter analyze
 flutter test
-node --test scripts/youtube_filter.test.mjs
+node --test scripts/*.test.mjs
+dart run tool/generate_car_qr_fixture.dart
+(cd android && ./gradlew :app:testDebugUnitTest --no-daemon)
 flutter run
 flutter build apk --release --split-per-abi
 ```
@@ -72,17 +75,36 @@ The initial release build uses Android's debug signing key for installation test
 It is not configured for store distribution or stable update signing. A production
 keystore and CI secrets must be configured before publishing a production release.
 
-## Integration decisions still required
+## Android Auto integration
 
-Android Auto projection uses host-controlled templates. Arbitrary Flutter widgets,
-a fixed 60/40 split, QR images and WebViews cannot be assumed to work on the car
-screen. Validate `mt_carplay` Android templates, supported app categories and the
-target head unit before choosing an adapter. The initial screen runs on the phone;
-no Android Auto car service or manifest integration has been implemented.
+The manifest declares both media and template capabilities. Audio uses
+`audio_service`'s MediaBrowserService and the same cached Flutter engine as
+MainActivity. A car can browse up to 20 recent played videos and send
+play/pause/seek/previous/next/stop commands. A cold car launch loads recent public
+video IDs from preferences without needing an Activity or Google sign-in.
 
-The map currently runs on the phone/Android head unit as a regular app. It is
-not an Android Auto projection surface. Wide layouts use a 60/40 map/calendar
-split; narrow layouts open the map from **Mở bản đồ 3D**.
+`TaxiCarService` uses AndroidX Car App Library navigation templates and a
+MapLibre renderer on the surface supplied by the car host. API 7+ combines the map
+with an overview containing Gregorian/lunar dates, an event countdown, VietQR and
+media status/actions. Home/Lịch/QR/Media actions open the detailed panels. Older
+hosts use a navigation map with separate detail screens. The host controls pane
+placement, scaling and content limits; the phone's 60/40 Flutter layout is not a
+fixed pixel layout on Android Auto. The existing mt_carplay dependency does not
+provide the map surface adapter, so that adapter is native AndroidX code.
+
+The car renderer retains native attribution, follows requested GPS fixes, shows
+route geometry, supports pan/zoom/3D/2D and lets a map tap choose a destination.
+Calendar and QR data come from the same repositories and payment preview as the
+phone. Editing an amount or changing account details hides a stale car QR.
+
+For real-car installation, Google's [testing guide](https://developer.android.com/training/cars/testing)
+requires a trusted source for Car App Library apps, such as Play Internal App
+Sharing/Internal Testing. Android Auto's developer **Unknown sources** option
+can enable sideloaded media apps; it does not authorize the native navigation
+template service. A GitHub APK build alone does not establish launcher visibility
+or Play eligibility. The release host validator uses AndroidX's published Google
+host certificate allowlist. No physical phone/head unit is attached here; test
+the launcher, audio routing and map viewport on the intended receiver.
 
 ## Offline bank catalog and saved recipients
 
@@ -143,9 +165,12 @@ replacing existing accounts/events; tests exercise a v1 database upgrade.
 **Mở bản đồ 3D** opens MapLibre Native with the OpenFreeMap Liberty vector style and
 its extruded-building layer. Toggle **3D/2D**, pan/zoom/rotate, tap the GPS button or
 search for an address. Initial camera center is Hanoi; it is not a fabricated user
-location. Location permission is requested only after pressing GPS. Only foreground
-coarse/fine permissions are declared; GPS is stopped when the app goes to the
-background or the map session is disposed. Speed is measured GPS speed in km/h,
+location. Location permission is requested on the phone after pressing GPS.
+Phone-only GPS stops when the app is backgrounded. GPS explicitly requested from
+Android Auto uses a location foreground service/notification and continues while
+the phone UI is hidden; it stops on car disconnect or GPS stop. A cold car session
+asks the user to grant missing location permission on the phone. No background
+location permission is declared. Speed is measured GPS speed in km/h,
 with an accuracy indicator. Unknown speed is shown as a dash.
 
 Address search uses explicit submissions to Nominatim in Vietnam, identifies the
@@ -153,7 +178,7 @@ app, caches repeated queries and paces new queries. It does not send autocomplet
 requests. Selecting a result or long-pressing the map chooses a destination.
 With an active GPS fix, **Xem tuyến ô tô** uses OSRM to draw a route with distance,
 approximate duration and a list of maneuvers. This is a route preview: no automatic
-rerouting, voice instructions, background navigation or downloaded offline map
+rerouting, voice instructions or downloaded offline map
 regions are implemented. Maps/search/routing need Internet and public service
 availability. Retain the native attribution control and OSM/OpenFreeMap credits.
 
@@ -219,7 +244,27 @@ The reference image motivates the extruded-building map. MapLibre/OpenFreeMap no
 provide that rendering path without an access token; building detail follows the
 available vector data and is not a photorealistic building model.
 
-Media needs an audio handler, Android foreground service and lifecycle setup.
+## Background audio and Android PiP
+
+The YouTube browser is owned by a process-level Riverpod session. Leaving its
+phone route, switching apps or locking the screen no longer closes/pauses it by
+default. A real media foreground service publishes playback, metadata and recent
+videos. Notification/lock-screen/Android Auto commands control the same browser.
+Calls/audio-focus interruptions and headphone disconnect pause playback.
+The phone dashboard contains a compact media card for returning to the player.
+
+Use the **PiP** action after opening a video. MainActivity declares native Android
+PiP support, retains the shared audio engine, enables automatic PiP on Home while
+the video screen is visible/playing, and hides page/Flutter controls in the small
+window. The YouTube menu controls **Phát âm thanh nền** and **Tự bật PiP khi về
+Home**. Explicit Stop releases the media session's active playback.
+
+The media script makes at most one attempt to resume an already-playing public
+video if the page pauses it when hidden. Native pause/stop and ended videos are
+respected. It does not spoof document visibility, extract streams or unlock
+restricted videos. YouTube/account restrictions and device battery policies can
+still interrupt background playback; the actual Redmi/receiver needs a live
+check. Android Auto receives an audio media surface, not an Android PiP window.
 
 ## Passenger YouTube browser (experimental)
 
@@ -227,8 +272,9 @@ The dashboard's YouTube action opens the public mobile YouTube website in a
 WebView. Search by words or paste an HTTPS YouTube link, return to the YouTube
 homepage, go back through browser history, retry failed loads, and use the
 website's fullscreen video control. Fullscreen back exits the video view first.
-Playback requires a user gesture. Going into the background pauses video/audio
-and suspends the filter; returning does not automatically start playback.
+The native media session can play a selected recent video without a page gesture.
+Opening the app or a car template alone does not create a browser or fabricate
+playing state; real media events drive the notification and car controls.
 
 The shield action toggles the experimental ad filter. Its JavaScript hides known
 promoted-card/overlay elements and attempts to skip a playing video only when
@@ -240,9 +286,9 @@ markup and ad delivery change: **ad-free playback is not guaranteed or verified
 on the actual website**, and filtering can break playback. Turn it off to
 diagnose a playback problem. This is not a completed 100% ad-free requirement.
 
-Preferences retain only the filter toggle and one sanitized public YouTube
-location, not a browsing history, account credentials or sign-in redirect
-parameters. Cookies stay in the platform WebView; the app does not read them.
+Preferences retain filter/background/PiP choices, one sanitized public YouTube
+location and up to 20 played-video IDs/titles. Account credentials and sign-in
+redirect parameters are not saved. Cookies stay in the platform WebView.
 Google can refuse sign-in in embedded WebViews. Public videos need no account,
 and video availability still depends on YouTube, region and network access.
 Top-level navigation is limited to exact HTTPS YouTube/Google consent/sign-in
@@ -250,20 +296,17 @@ hosts; arbitrary external sites and custom schemes are not opened. Web camera
 and microphone requests are denied. Certificate errors use the platform's
 default behavior.
 
-**Current target:** a passenger-only screen receiving Android Auto projection
-from a Xiaomi Redmi Note 12 Pro, Android 13, Android Auto 18.1.164344. This build
-does not declare a projected YouTube service or add Android Auto video support.
-The official parked-activity projection path requires Android 15+, and its
-documented generally supported category is games. Android Auto controls app
-availability and motion restrictions. A screen being physically installed for
-passengers does not provide a public API to override those host restrictions.
-Fermata uses a separate legacy projection SDK; adding the Flutter WebView or
-copying a manifest entry does not reproduce that integration. No root hooks,
-installer spoofing, category spoofing or host patches are included.
+**Current target:** a passenger-only receiver connected to a Xiaomi Redmi Note
+12 Pro, Android 13, Android Auto 18.1.164344. Android phone PiP, car audio and
+navigation-template code are implemented. Projected YouTube video and PiP on
+Android Auto are not implemented. The receiver's app availability and composition
+remain host-controlled.
 
 See [YouTube compatibility and remaining acceptance checks](docs/youtube-compatibility.md).
 Flutter tests cover URL boundaries, settings persistence, ordered writes, browser
-control flow, fullscreen back, retry, lifecycle pause and responsive layouts.
+control flow, fullscreen back, retry, background/PiP lifecycle and responsive layouts.
 The native browser is replaced by a fake in widget tests; Node tests execute the
-actual filter script against simulated ad/non-ad player states. These checks do
-not validate live YouTube ads, the physical screen, or Android Auto projection.
+actual scripts against simulated ad/non-ad/background player states. Native tests
+verify manifest services/PiP, pane content limits, stale-QR handling and decoding
+an Android-rendered bitmap from the current Dart QR encoder using ZXing. These
+checks do not validate live YouTube ads, the physical screen or car video.

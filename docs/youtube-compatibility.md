@@ -1,77 +1,90 @@
-# YouTube passenger-screen requirement
+# YouTube, PiP and Android Auto — 0.4.0
 
 Updated: 2026-10-30 (Vietnam).
 
-The Master Prompt requires YouTube without ads and video while the vehicle is
-moving. The owner clarified that the display is dedicated to passengers and
-receives Android Auto projection from a phone. This requirement remains open;
-the regular-app WebView is a reusable first component, not proof of projection.
+Target reported by the owner: Xiaomi Redmi Note 12 Pro, Android 13, Android Auto
+18.1.164344, connected to a passenger-only Android Auto receiver. Receiver model
+and firmware are not yet known. No physical phone/receiver or Desktop Head Unit
+is attached to this development environment.
 
-## Reported equipment
+## Implementation status
 
-| Component | Owner-provided information |
-| --- | --- |
-| Phone | Xiaomi Redmi Note 12 Pro |
-| Phone OS | Android 13 |
-| Android Auto | 18.1.164344 |
-| Display | Dedicated to passengers, Android Auto receiver |
-| Display manufacturer/model | Not yet provided |
-| Physical test connection | No phone/head unit attached to the development environment |
-
-## Evidence and implementation boundary
-
-1. [Android Auto overview](https://developer.android.com/training/cars/platforms/android-auto)
-   documents host-controlled services/templates, parked activity projection on
-   Android 15+, automatic app exit on vehicle motion, and trusted-install-source
-   requirements for real vehicles. The Android 15+ activity path does not apply
-   to the reported Android 13 phone.
-2. [Add support for Android Auto to your parked app](https://developer.android.com/training/cars/parked/auto)
-   currently lists games as the generally supported parked activity category.
-   Declaring CAR_LAUNCHER does not make an arbitrary video/browser app compatible.
-3. [Supported app categories](https://developer.android.com/training/cars)
-   distinguishes media audio, templated navigation and parked video. Audio
-   media controls do not carry a video surface.
-4. The referenced [Fermata manifest](https://github.com/AndreyPavlenko/Fermata/blob/7d2bd42e0fea98a796ba069b56c48ef07d874549/fermata/src/auto/AndroidManifest.xml),
-   [build configuration](https://github.com/AndreyPavlenko/Fermata/blob/7d2bd42e0fea98a796ba069b56c48ef07d874549/fermata/build.gradle)
-   and [MainCarActivity](https://github.com/AndreyPavlenko/Fermata/blob/7d2bd42e0fea98a796ba069b56c48ef07d874549/fermata/src/auto/java/me/aap/fermata/auto/MainCarActivity.java)
-   show a separate bundled aauto.aar SDK and CarActivity-based projection
-   services. This differs from mt_carplay's standard AndroidX templates.
-   The reviewed source does not prove compatibility with this owner's Android
-   Auto version. No Fermata source/binary was copied into this project.
-5. [Flutter Android WebView fullscreen documentation](https://pub.dev/packages/webview_flutter_android)
-   describes embedding and fullscreen callbacks inside a regular activity. It
-   does not provide an Android Auto transport.
-
-The app does not request that the host disable motion restrictions or assume
-that a non-default display is necessarily a verified passenger display.
-
-## Acceptance status
-
-| Requirement | Current status | Remaining evidence |
+| Capability | Implementation | Device acceptance |
 | --- | --- | --- |
-| YouTube entry, search/link, back/home/reload | Implemented in regular app | Native phone test |
-| Fullscreen video and lifecycle pause | Implemented using Android WebView | Native phone/display test |
-| Filter preference and restored public location | Implemented and tested with mock preferences | App restart check on phone |
-| Experimental ad filtering | Script behavior tested on simulated DOM | Live YouTube playback/ad tests; check for breakage |
-| Reliably no YouTube ads | **Not verified / not complete** | Actual ad cases across several videos and sessions; maintain filter as YouTube changes |
-| Display YouTube via Android Auto 18.1.164344 | **Not implemented / not complete** | Supported projection adapter and target-device connection |
-| Continue video in motion on dedicated passenger display | **Not implemented / not complete** | Receiver capabilities and supported passenger display/session integration |
+| Public YouTube on phone | Existing WebView search/link/fullscreen; foreground playback confirmed by owner for 0.3.0 | Recheck 0.4.0 |
+| Background audio | Persistent browser session, media foreground service, audio focus and notification/lock-screen controls | Phone/Home/screen-lock check needed |
+| Android PiP | Native activity support, manual button, automatic Home entry, compact video UI | Check PiP permission and transitions on Redmi |
+| Android Auto audio | MediaBrowserService, recent-played catalog, actual playback metadata and controls | Enable sideloaded media testing, then connect receiver |
+| Android Auto layout | Native navigation service, map surface, overview and calendar/QR/media panels; older-host fallback | Requires supported host and trusted installation |
+| Reliable removal of all ads | Experimental DOM filtering | Still not guaranteed or verified on live ads |
+| YouTube video/PiP on Android Auto | **Not implemented**; audio/media templates do not carry the video window | Remains an unresolved requirement |
 
-## Device validation sequence
+Android phone PiP and the Android Auto media surface are separate features. The
+native map surface renders navigation content; it does not project a WebView or
+Android PiP window. Host layout determines the map/pane split and launcher entries.
 
-1. Record the receiver model, firmware, wired/wireless connection type and whether
-   it exposes an OEM-supported passenger video/display interface.
-2. Verify the regular APK on the phone: search, public video, fullscreen,
-   back/home, offline error/retry, screen rotation and background pause.
-3. Check several ad-bearing videos with the filter on/off. Record visible ads,
-   playback failures and whether ordinary content was skipped. Test without
-   entering account credentials first; Google WebView sign-in may be refused.
-4. Select a projection approach only after confirming receiver and phone support.
-   A successful APK build, a media-service launcher icon or phone playback does
-   not count as projected video acceptance.
-5. Validate a supported passenger display/session using a stationary test setup
-   or simulator that can report vehicle motion state. Confirm the driver-facing
-   session remains separate. Do not ask the driver to watch or operate the video
-   during a road test.
+## Phone check
 
-No new hardware purchase or Android OS update is assumed in this implementation.
+1. Open YouTube in the app and play a public video. Verify its title and play state
+   in the media notification and the dashboard media card.
+2. Use the PiP button, return to the video, and press Home with automatic PiP on.
+   The small window should show video rather than the app toolbar/webpage header.
+3. Turn automatic PiP off, keep background audio on, then press Home or lock the
+   screen. Test pause/play/seek/stop from the notification and headset.
+4. Return to the dashboard while listening and reopen YouTube. The player should
+   retain its session. Explicit Stop should end active foreground playback.
+5. Disable background audio and verify a fully backgrounded non-PiP activity
+   pauses. Audio-focus interruptions and headphone disconnect should also pause.
+
+The browser attempts to resume a previously playing video only once if a hidden
+page pauses it. Native pause/stop, disabled background audio and video end take
+precedence. No visibility spoofing, stream extraction or account/region unlock is
+used. YouTube and device policies can still prevent playback; a functioning
+foreground service cannot guarantee the website will supply background media.
+
+## Android Auto installation and check
+
+Google's [car testing guide](https://developer.android.com/training/cars/testing)
+allows developer **Unknown sources** testing for media apps. That exception does
+not apply to Car App Library navigation templates; those require a trusted source
+such as Play Internal App Sharing/Internal Testing for use in a real vehicle.
+A sideloaded APK may therefore show the music entry while the map entry remains
+unavailable. Production signing and Play distribution are not configured yet.
+
+For the audio APK test, open Android Auto settings, enable its developer menu by
+repeatedly tapping the version information, enable **Unknown sources**, and check
+its launcher customization for ThanhTaxiXanh. Play a video once on the phone to
+populate **YouTube gần đây**, reconnect the receiver and select that catalog.
+Check car-first startup, play/pause/seek/previous/next and audio routing.
+
+For a trusted/DHU navigation installation, verify the map and overview appear,
+then test Home/Lịch/QR/Media panels, zoom, 3D/2D and requested GPS. Grant missing
+location permission on the phone first. Tapping the map selects a destination;
+**Xem tuyến ô tô** draws a manually requested route preview. This is not yet voice
+turn-by-turn navigation or automatic rerouting. Car-requested GPS runs in a
+location foreground service while the phone UI is hidden and stops on disconnect.
+
+The overview contains Gregorian/lunar dates, the next event, a payment summary
+and media controls, with a QR image when a valid request exists. Editing payment
+fields or changing saved recipient details must hide an old request. Test QR
+readability and media control layout at the receiver's actual resolution.
+
+## Automated evidence and limits
+
+Flutter tests cover media-message validation, persistent sessions, background
+preference, PiP entry/exit/failure, recent history, media-browser commands,
+consecutive skips, calendar snapshots, stale QR suppression and car GPS lifecycle.
+Node tests execute the actual filter/media scripts against simulated DOMs.
+Native Robolectric tests validate manifest declarations, template content limits,
+and an Android-rendered QR bitmap decoded with ZXing from the current Dart encoder.
+
+These are code/model tests and compilation checks. They do not establish live
+YouTube ad blocking, MIUI process survival, GPU rendering on the receiver, the
+receiver's launcher policy, or video/PiP projection in motion. APK test builds
+use temporary debug signing; changing signer requires reinstalling and removes
+local app data. Stable production signing remains a separate release task.
+
+References: [Android PiP](https://developer.android.com/develop/ui/views/picture-in-picture),
+[Android Auto media integration](https://developer.android.com/training/cars/media/auto),
+[Android Auto platforms](https://developer.android.com/training/cars/platforms/android-auto),
+[MapWithContentTemplate](https://developer.android.com/reference/androidx/car/app/navigation/model/MapWithContentTemplate).
